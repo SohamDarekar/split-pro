@@ -28,7 +28,7 @@ export type CreateExpense = Omit<
   fileKey?: string;
   expenseId?: string;
   transactionId?: string;
-  participants: Omit<ExpenseParticipant, 'expenseId'>[];
+  participants: Omit<ExpenseParticipant, 'expenseId' | 'settledAt'>[];
 };
 
 export const createExpenseSchema = z.object({

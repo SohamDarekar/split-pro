@@ -300,12 +300,10 @@ export const settleBalances = async (
               {
                 userId: sender,
                 amount: balance.amount,
-                settledAt: null,
               },
               {
                 userId: receiver,
                 amount: -balance.amount,
-                settledAt: null,
               },
             ],
             paidBy: sender,
