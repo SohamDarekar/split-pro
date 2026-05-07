@@ -426,6 +426,7 @@ export const expenseRouter = createTRPCRouter({
             expenseId: expense.id,
             user: gu.user,
             amount: 0n,
+            settledAt: null,
           });
         });
       }
