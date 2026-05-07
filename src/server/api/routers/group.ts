@@ -15,8 +15,6 @@ import {
   serializeDefaultSplit,
 } from '~/lib/defaultSplit';
 
-const PER_EXPENSE_EXCLUDED_SPLIT_TYPES = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
-
 /**
  * In per_expense mode, checks whether any non-payer participants remain
  * unsettled in the given group (or for a specific userId within that group).

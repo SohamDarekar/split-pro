@@ -22,7 +22,7 @@ import { getUserMap } from './user';
 import { FriendBalance } from '~/components/Friend/FriendBalance';
 import { env } from '~/env';
 
-const PER_EXPENSE_EXCLUDED_SPLIT_TYPES = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
+const PER_EXPENSE_EXCLUDED_SPLIT_TYPES: SplitType[] = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
 
 export const expenseRouter = createTRPCRouter({
   getSettlementMode: protectedProcedure.query(() => {

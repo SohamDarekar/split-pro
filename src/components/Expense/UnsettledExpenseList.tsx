@@ -1,3 +1,4 @@
+import { type inferRouterOutputs } from '@trpc/server';
 import { CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -5,11 +6,10 @@ import { useTranslationWithUtils } from '~/hooks/useTranslationWithUtils';
 import { EntityAvatar } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { CategoryIcon } from '~/components/ui/categoryIcons';
+import { type ExpenseRouter } from '~/server/api/routers/expense';
 import { api } from '~/utils/api';
 
-type UnsettledExpense = NonNullable<
-  ReturnType<typeof api.expense.getUnsettledExpenses.useQuery>['data']
->[number];
+type UnsettledExpense = NonNullable<inferRouterOutputs<ExpenseRouter>['getUnsettledExpenses'][number]>;
 
 const UnsettledExpenseRow: React.FC<{
   expense: UnsettledExpense;
