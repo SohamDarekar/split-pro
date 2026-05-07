@@ -1,0 +1,62 @@
+# Example deployment using the pre-built GHCR image.
+#
+# Usage:
+#   1. Copy this file to docker-compose.yml (or load it in Coolify).
+#   2. Replace <placeholder-username> with your GitHub username.
+#   3. Copy .env.example to .env and fill in all required values.
+#   4. Set SETTLEMENT_MODE=per_expense if you want per-expense isolation,
+#      or leave it as 'accumulated' (the default / original behaviour).
+#
+# Coolify notes:
+#   - In Coolify, create a "Docker Compose" service and paste this file.
+#   - Coolify manages SSL and domain routing via its proxy — remove or
+#     comment out the `ports` block on splitpro and let Coolify handle it.
+#   - Set env vars in Coolify's environment panel instead of an .env file.
+
+name: split-pro
+
+services:
+  splitpro-db:
+    image: ossapps/postgres:17.7-trixie
+    container_name: ${POSTGRES_CONTAINER_NAME:-splitpro-db}
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?err}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?err}
+      - POSTGRES_DB=${POSTGRES_DB:?err}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_cron
+      -c cron.database_name=${POSTGRES_DB:-splitpro}
+      -c cron.timezone=UTC
+    env_file: .env
+    volumes:
+      - database:/var/lib/postgresql/data
+
+  splitpro:
+    image: ghcr.io/<placeholder-username>/split-pro:latest
+    container_name: splitpro
+    restart: always
+    ports:
+      - ${PORT:-3000}:${PORT:-3000}
+    environment:
+      - PORT=${PORT:-3000}
+      - SETTLEMENT_MODE=${SETTLEMENT_MODE:-accumulated}
+      # Uncomment to listen on all interfaces (needed for reverse proxy / Coolify):
+      # - HOSTNAME=0.0.0.0
+    env_file: .env
+    depends_on:
+      splitpro-db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  database:
+  uploads:
