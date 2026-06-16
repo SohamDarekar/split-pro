@@ -124,7 +124,11 @@ const ActivityPage: NextPageWithUser = ({ user }) => {
                     toUIString,
                     !!e.expense.deletedBy,
                   )}
-                  <p className="text-xs text-gray-500">{toUIDate(e.expense.expenseDate)}</p>
+                  <p className="text-xs text-gray-500">
+                    {toUIDate(e.expense.expenseDate, {
+                      time: e.expense.splitType === SplitType.SETTLEMENT,
+                    })}
+                  </p>
                 </div>
               </Link>
             );

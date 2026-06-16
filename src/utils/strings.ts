@@ -23,18 +23,25 @@ export const displayName = (
 export const toUIDate = (
   t: TFunction,
   date: Date,
-  { useToday = false, year = false } = {},
+  { useToday = false, year = false, time = false } = {},
 ): string => {
   const todayTranslation = t('ui.today', { returnDetails: true });
 
+  const timeSuffix = time
+    ? ` ${new Intl.DateTimeFormat(todayTranslation.usedLng, {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date)}`
+    : '';
+
   if (useToday && isToday(date)) {
-    return todayTranslation.res;
+    return `${todayTranslation.res}${timeSuffix}`;
   }
 
   if (year) {
-    return Intl.DateTimeFormat(todayTranslation.usedLng, {
+    return `${Intl.DateTimeFormat(todayTranslation.usedLng, {
       dateStyle: 'long',
-    }).format(date);
+    }).format(date)}${timeSuffix}`;
   }
 
   const day = new Intl.DateTimeFormat(todayTranslation.usedLng, { day: '2-digit' }).format(date);
@@ -42,7 +49,7 @@ export const toUIDate = (
     .format(date)
     .replace('.', '');
 
-  return `${monthName} ${day}`;
+  return `${monthName} ${day}${timeSuffix}`;
 };
 
 export function generateSplitDescription(

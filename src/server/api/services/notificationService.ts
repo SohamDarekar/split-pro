@@ -138,7 +138,7 @@ export async function sendExpensePushNotification(expenseId: string) {
 
   const formatAmount = (currency: string, amount: bigint) => {
     const { toUIString } = getCurrencyHelpers({
-      currency: isCurrencyCode(currency) ? currency : 'USD',
+      currency: isCurrencyCode(currency) ? currency : 'AUD',
     });
     return toUIString(amount);
   };

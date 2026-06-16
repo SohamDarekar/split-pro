@@ -11,7 +11,7 @@ export interface RateResponse {
 class ProviderMissingError extends Error {}
 
 abstract class CurrencyRateProvider {
-  intermediateBase: CurrencyCode | null = null;
+  intermediateBase: string | null = null;
   abstract providerName: string;
 
   abstract fetchRates(from: CurrencyCode, to: CurrencyCode, date?: Date): Promise<RateResponse>;
@@ -47,8 +47,8 @@ abstract class CurrencyRateProvider {
   }
 
   protected async checkCache(
-    from: CurrencyCode,
-    to: CurrencyCode,
+    from: string,
+    to: string,
     date: Date = new Date(),
   ): Promise<number | undefined> {
     const cachedRate = await this.getCache(from, to, date);
@@ -79,7 +79,7 @@ abstract class CurrencyRateProvider {
     }
   }
 
-  private upsertCache(from: CurrencyCode, to: CurrencyCode, date: Date, rate: number) {
+  private upsertCache(from: string, to: string, date: Date, rate: number) {
     return db.cachedCurrencyRate.upsert({
       where: {
         from_to_date: { from, to, date },
@@ -98,7 +98,7 @@ abstract class CurrencyRateProvider {
     });
   }
 
-  private async getCache(from: CurrencyCode, to: CurrencyCode, date: Date) {
+  private async getCache(from: string, to: string, date: Date) {
     const result = await db.cachedCurrencyRate.findUnique({
       where: {
         from_to_date: { from, to, date },
@@ -139,7 +139,7 @@ class FrankfurterProvider extends CurrencyRateProvider {
 
 class OpenExchangeRatesProvider extends CurrencyRateProvider {
   providerName = 'openexchangerates';
-  intermediateBase: CurrencyCode = 'USD';
+  intermediateBase = 'USD';
 
   async fetchRates(from: CurrencyCode, to: CurrencyCode, date?: Date): Promise<RateResponse> {
     if (!env.OPEN_EXCHANGE_RATES_APP_ID) {
@@ -163,7 +163,7 @@ class OpenExchangeRatesProvider extends CurrencyRateProvider {
 
 class NbpProvider extends CurrencyRateProvider {
   providerName = 'nbp';
-  intermediateBase: CurrencyCode = 'PLN';
+  intermediateBase = 'PLN';
 
   async fetchRates(from: CurrencyCode, to: CurrencyCode, date?: Date): Promise<RateResponse> {
     const key = !date || isToday(date) ? '' : format(date, 'yyyy-MM-dd');

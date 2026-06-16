@@ -2,12 +2,12 @@ import { CURRENCIES, type CurrencyCode, isCurrencyCode } from '~/lib/currency';
 
 export const getCurrencyHelpers = ({
   locale = 'en-US',
-  currency = 'USD',
+  currency = 'AUD',
 }: {
   locale?: string;
   currency?: string;
 }) => {
-  currency = isCurrencyCode(currency) ? currency : 'USD';
+  currency = isCurrencyCode(currency) ? currency : 'AUD';
   const { decimalDigits } = CURRENCIES[currency as CurrencyCode];
 
   const formatter = new Intl.NumberFormat(locale, {

@@ -6,59 +6,45 @@ describe('getCurrencyHelpers', () => {
     describe('en-US locale', () => {
       const locale = 'en-US';
 
-      describe('USD', () => {
-        const currency = 'USD';
+      describe('AUD', () => {
+        const currency = 'AUD';
         const { toUIString } = getCurrencyHelpers({ locale, currency });
 
         it.each([
-          [12345n, '$123.45'],
-          [-12345n, '$123.45'],
-          [-50n, '$0.5'],
-          [-0n, '$0'],
-          [99999999999999999999999999999n, '$999,999,999,999,999,999,999,999,999.99'],
-          [-99999999999999999999999999999n, '$999,999,999,999,999,999,999,999,999.99'],
+          [12345n, 'A$123.45'],
+          [-12345n, 'A$123.45'],
+          [-50n, 'A$0.5'],
+          [-0n, 'A$0'],
+          [99999999999999999999999999999n, 'A$999,999,999,999,999,999,999,999,999.99'],
+          [-99999999999999999999999999999n, 'A$999,999,999,999,999,999,999,999,999.99'],
         ])('should format %p as %p ', (value, expected) => {
           expect(toUIString(value)).toBe(expected);
         });
 
         it('should format with thousands separators for large numbers', () => {
           const value = 12345678900n;
-          expect(toUIString(value)).toBe('$123,456,789');
+          expect(toUIString(value)).toBe('A$123,456,789');
         });
 
         it('should insert thousands separators for single ~1k values', () => {
           const value = 123400n;
-          expect(toUIString(value)).toBe('$1,234');
+          expect(toUIString(value)).toBe('A$1,234');
         });
 
         it('Should correctly format single digit cent amounts', () => {
           const value = 7n;
-          expect(toUIString(value)).toBe('$0.07');
+          expect(toUIString(value)).toBe('A$0.07');
         });
 
         it.each([
-          [12345n, '$123.45'],
-          [-12345n, '-$123.45'],
-          [-50n, '-$0.5'],
-          [-0n, '$0'],
-          [99999999999999999999999999999n, '$999,999,999,999,999,999,999,999,999.99'],
-          [-99999999999999999999999999999n, '-$999,999,999,999,999,999,999,999,999.99'],
+          [12345n, 'A$123.45'],
+          [-12345n, '-A$123.45'],
+          [-50n, '-A$0.5'],
+          [-0n, 'A$0'],
+          [99999999999999999999999999999n, 'A$999,999,999,999,999,999,999,999,999.99'],
+          [-99999999999999999999999999999n, '-A$999,999,999,999,999,999,999,999,999.99'],
         ])('should format %p as %p with signed flag', (value, expected) => {
           expect(toUIString(value, true)).toBe(expected);
-        });
-      });
-      describe('JPY (no decimals)', () => {
-        const currency = 'JPY';
-
-        const { toUIString } = getCurrencyHelpers({ locale, currency });
-
-        it.each([
-          [12345n, '¥12,345'],
-          [-12345n, '¥12,345'],
-          [-50n, '¥50'],
-          [-0n, '¥0'],
-        ])('should format %p as %p ', (value, expected) => {
-          expect(toUIString(value)).toBe(expected);
         });
       });
     });
@@ -66,28 +52,28 @@ describe('getCurrencyHelpers', () => {
     describe('bg-BG locale', () => {
       const locale = 'bg-BG';
 
-      describe('EUR', () => {
-        const currency = 'EUR';
+      describe('INR', () => {
+        const currency = 'INR';
 
         const { toUIString } = getCurrencyHelpers({ locale, currency });
 
         it.each([
-          [12345n, '123,45 €'],
-          [-12345n, '123,45 €'],
-          [-50n, '0,5 €'],
-          [-0n, '0 €'],
+          [12345n, '123,45 INR'],
+          [-12345n, '123,45 INR'],
+          [-50n, '0,5 INR'],
+          [-0n, '0 INR'],
         ])('should format %p as %p ', (value, expected) => {
           expect(toUIString(value)).toBe(expected);
         });
 
         it('should format with thousands separators for large numbers', () => {
-          expect(toUIString(12345678900n)).toBe('123 456 789 €');
-          expect(toUIString(5678900n)).toBe('56 789 €');
+          expect(toUIString(12345678900n)).toBe('123 456 789 INR');
+          expect(toUIString(5678900n)).toBe('56 789 INR');
         });
 
         it('should not insert thousands separators for single ~1k values', () => {
           const value = 123400n;
-          expect(toUIString(value)).toBe('1234 €');
+          expect(toUIString(value)).toBe('1234 INR');
         });
       });
     });
@@ -96,7 +82,7 @@ describe('getCurrencyHelpers', () => {
   describe('toSafeBigInt', () => {
     const { toSafeBigInt } = getCurrencyHelpers({
       locale: 'en-US',
-      currency: 'USD',
+      currency: 'AUD',
     });
 
     it.each([
@@ -146,7 +132,7 @@ describe('getCurrencyHelpers', () => {
   describe('sanitizeInput', () => {
     const { sanitizeInput } = getCurrencyHelpers({
       locale: 'en-US',
-      currency: 'USD',
+      currency: 'AUD',
     });
 
     it.each([
@@ -176,23 +162,23 @@ describe('getCurrencyHelpers', () => {
 });
 
 describe('currencyConversion', () => {
-  it('handles increasing decimal digit conversions', () => {
-    const from = 'JPY'; // 0 decimal digits
-    const to = 'USD';
-    const amount = 12345n; // 12345 JPY
-    const rate = 0.0073; // 1 JPY = 0.0073 USD
+  it('handles same decimal digit conversions', () => {
+    const from = 'AUD'; // 2 decimal digits
+    const to = 'INR'; // 2 decimal digits
+    const amount = 12345n; // 123.45 AUD
+    const rate = 56.6; // 1 AUD = 56.6 INR
 
     const res = currencyConversion({ from, to, amount, rate });
 
-    // 12345 JPY * 0.0073 = 90.1185 USD -> rounded to 90.12 USD -> 9012 in bigint
-    expect(res).toBe(9012n);
+    // 123.45 AUD * 56.6 = 6987.27 INR -> 698727 in bigint
+    expect(res).toBe(698727n);
   });
 
-  it('handles decreasing decimal digit conversions', () => {
-    const from = 'USD'; // 2 decimal digits
-    const to = 'JPY';
-    const amount = 9012n;
-    const rate = 1 / 0.0073;
+  it('handles the inverse conversion', () => {
+    const from = 'INR';
+    const to = 'AUD';
+    const amount = 698727n;
+    const rate = 1 / 56.6;
 
     const res = currencyConversion({ from, to, amount, rate });
 

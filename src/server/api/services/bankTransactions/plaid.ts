@@ -207,14 +207,14 @@ export class PlaidService extends AbstractBankProvider {
       description: transaction.name || transaction.merchant_name || '?',
       transactionAmount: {
         amount: transaction.amount?.toString() || '0',
-        currency: transaction.iso_currency_code || 'USD',
+        currency: transaction.iso_currency_code || 'AUD',
       },
     };
   }
 
   private formatTransactions(transactions: Transaction[]): TransactionOutput {
-    const bookedTransactions = transactions.filter((t) => t.pending === false);
-    const pendingTransactions = transactions.filter((t) => t.pending === true);
+    const bookedTransactions = transactions.filter((t) => !t.pending);
+    const pendingTransactions = transactions.filter((t) => t.pending);
 
     return {
       transactions: {

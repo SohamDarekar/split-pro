@@ -61,7 +61,7 @@ export const UserInput: React.FC<{
         email: nameOrEmail,
         emailVerified: new Date(),
         image: null,
-        currency: 'USD',
+        currency: 'AUD',
         defaultCurrency: null,
         obapiProviderId: null,
         bankingId: null,

@@ -106,7 +106,7 @@ const RecurringPage: NextPageWithUser = () => {
   const { cronParser, i18nReady } = useIntlCronParser();
 
   const { toUIString } = getCurrencyHelpersCached(
-    recurringExpensesQuery.data?.[0]?.expense.currency ?? 'USD',
+    recurringExpensesQuery.data?.[0]?.expense.currency ?? 'AUD',
   );
 
   const handleDelete = useCallback(

@@ -80,7 +80,7 @@ export const useAddExpenseStore = create<AddExpenseState>()((set) => ({
     [SplitType.ADJUSTMENT]: {},
     [SplitType.SETTLEMENT]: {},
   },
-  currency: 'USD',
+  currency: 'AUD',
   category: DEFAULT_CATEGORY,
   nameOrEmail: '',
   description: '',

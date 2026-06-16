@@ -33,7 +33,7 @@ interface Expense {
 // Logic extracted from getUnsettledExpenses (expense.ts)
 // ---------------------------------------------------------------------------
 
-const EXCLUDED_TYPES = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
+const EXCLUDED_TYPES: SplitType[] = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
 
 function isUnsettledForUser(expense: Expense, userId: number): boolean {
   if (expense.paidBy === userId) {
@@ -60,15 +60,9 @@ function filterUnsettledExpenses(expenses: Expense[], userId: number): Expense[]
 // Authorization logic extracted from settleExpenseForUser (expense.ts)
 // ---------------------------------------------------------------------------
 
-type SettleAuth =
-  | { ok: true }
-  | { ok: false; reason: 'unauthorized' | 'cannot_settle_payer' };
+type SettleAuth = { ok: true } | { ok: false; reason: 'unauthorized' | 'cannot_settle_payer' };
 
-function checkSettleAuth(
-  callerId: number,
-  targetUserId: number,
-  paidBy: number,
-): SettleAuth {
+function checkSettleAuth(callerId: number, targetUserId: number, paidBy: number): SettleAuth {
   if (targetUserId === paidBy) {
     return { ok: false, reason: 'cannot_settle_payer' };
   }
@@ -88,9 +82,9 @@ const BASE_EXPENSE: Expense = {
   splitType: SplitType.EQUAL,
   deletedAt: null,
   expenseParticipants: [
-    { userId: 1, amount: 50n, settledAt: null }, // payer share (positive)
-    { userId: 2, amount: -50n, settledAt: null }, // debtor A
-    { userId: 3, amount: -50n, settledAt: null }, // debtor B
+    { userId: 1, amount: 50n, settledAt: null }, // Payer share (positive)
+    { userId: 2, amount: -50n, settledAt: null }, // Debtor A
+    { userId: 3, amount: -50n, settledAt: null }, // Debtor B
   ],
 };
 
@@ -110,7 +104,7 @@ describe('filterUnsettledExpenses', () => {
         ...BASE_EXPENSE,
         expenseParticipants: [
           { userId: 1, amount: 50n, settledAt: null },
-          { userId: 2, amount: -50n, settledAt: new Date() }, // settled
+          { userId: 2, amount: -50n, settledAt: new Date() }, // Settled
           { userId: 3, amount: -50n, settledAt: null },
         ],
       };
@@ -135,8 +129,8 @@ describe('filterUnsettledExpenses', () => {
         ...BASE_EXPENSE,
         expenseParticipants: [
           { userId: 1, amount: 50n, settledAt: null },
-          { userId: 2, amount: -50n, settledAt: new Date() }, // settled
-          { userId: 3, amount: -50n, settledAt: new Date() }, // settled
+          { userId: 2, amount: -50n, settledAt: new Date() }, // Settled
+          { userId: 3, amount: -50n, settledAt: new Date() }, // Settled
         ],
       };
       const result = filterUnsettledExpenses([expense], 1);
@@ -148,8 +142,8 @@ describe('filterUnsettledExpenses', () => {
         ...BASE_EXPENSE,
         expenseParticipants: [
           { userId: 1, amount: 50n, settledAt: null },
-          { userId: 2, amount: -50n, settledAt: new Date() }, // settled
-          { userId: 3, amount: -50n, settledAt: null }, // still unsettled
+          { userId: 2, amount: -50n, settledAt: new Date() }, // Settled
+          { userId: 3, amount: -50n, settledAt: null }, // Still unsettled
         ],
       };
       const result = filterUnsettledExpenses([expense], 1);
@@ -161,8 +155,8 @@ describe('filterUnsettledExpenses', () => {
       const expense: Expense = {
         ...BASE_EXPENSE,
         expenseParticipants: [
-          { userId: 1, amount: 50n, settledAt: null }, // payer, positive, NOT a debt
-          { userId: 2, amount: -50n, settledAt: new Date() }, // settled debtor
+          { userId: 1, amount: 50n, settledAt: null }, // Payer, positive, NOT a debt
+          { userId: 2, amount: -50n, settledAt: new Date() }, // Settled debtor
         ],
       };
       const result = filterUnsettledExpenses([expense], 1);

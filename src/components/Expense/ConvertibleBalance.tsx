@@ -163,7 +163,7 @@ export const ConvertibleBalance: React.FC<ConvertibleBalanceProps> = ({
   console.log(selectedCurrency, groupDefaultCurrency);
 
   if (0 === balances.length) {
-    return <AmountDisplay className={className} amount={0n} currency="USD" />;
+    return <AmountDisplay className={className} amount={0n} currency="AUD" />;
   }
 
   // If only one currency, no conversion needed, unless different preference exists
