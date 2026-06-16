@@ -41,7 +41,7 @@ const isPermanentPushFailure = (statusCode: number | undefined) =>
 
 export const sendPushNotificationToUsers = async (userIds: number[], pushData: PushMessage) => {
   if (0 === userIds.length) {
-    return { sentCount: 0 };
+    return { sentCount: 0, error: undefined };
   }
 
   const subscriptions = await db.pushNotification.findMany({
@@ -51,6 +51,10 @@ export const sendPushNotificationToUsers = async (userIds: number[], pushData: P
       },
     },
   });
+
+  if (0 === subscriptions.length) {
+    return { sentCount: 0, error: 'No push subscription found for this device/account' };
+  }
 
   const pushResults = await Promise.all(
     subscriptions.map(async (s) => {
@@ -65,7 +69,12 @@ export const sendPushNotificationToUsers = async (userIds: number[], pushData: P
       .map((result) => ({ userId: result.userId, endpoint: result.endpoint })),
   );
 
-  return { sentCount: pushResults.filter((result) => result.ok).length };
+  const firstFailure = pushResults.find((result) => !result.ok);
+
+  return {
+    sentCount: pushResults.filter((result) => result.ok).length,
+    error: firstFailure && !firstFailure.ok ? firstFailure.error : undefined,
+  };
 };
 
 export async function sendExpensePushNotification(expenseId: string) {

@@ -403,6 +403,7 @@
     "deleted_by": "Deleted by",
     "edited_by": "Edited by",
     "expense": {
+      "completed_payment": "completed payment on",
       "for": "for",
       "from": "from",
       "paid_by": "Paid by",

@@ -64,7 +64,11 @@ export const DebugInfo: React.FC<React.PropsWithChildren> = ({ children }) => {
     try {
       const result = await sendTestPushNotification.mutateAsync();
       if (0 === result.sentCount) {
-        toast.error(t('account.debug_info_details.test_notification_failed'));
+        toast.error(
+          result.error
+            ? `${t('account.debug_info_details.test_notification_failed')}: ${result.error}`
+            : t('account.debug_info_details.test_notification_failed'),
+        );
         return;
       }
 

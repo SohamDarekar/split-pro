@@ -171,15 +171,16 @@ const ExpenseParticipantEntry: React.FC<{
   userId: number;
   currency: string;
 }> = ({ participant, userId, currency }) => {
-  const { displayName, t, getCurrencyHelpersCached } = useTranslationWithUtils();
+  const { displayName, t, toUIDate, getCurrencyHelpersCached } = useTranslationWithUtils();
   const { toUIString } = getCurrencyHelpersCached(currency);
 
   const isCurrentUser = userId === participant.userId;
   const isPositive = participant.amount > 0n;
-  const amountColorClass = isPositive ? 'text-positive' : 'text-negative';
+  const isSettled = !isPositive && null !== participant.settledAt;
+  const amountColorClass = isPositive || isSettled ? 'text-positive' : 'text-negative';
 
   return (
-    <div key={participant.userId} className="flex items-center gap-2 text-sm">
+    <div key={participant.userId} className="flex flex-wrap items-center gap-2 text-sm">
       <Link href={isCurrentUser ? '/balances' : `/balances/${participant.userId}`}>
         <Button variant="outline" size="sm" className="gap-2 px-2">
           <EntityAvatar entity={participant.user} size={25} />
@@ -187,9 +188,16 @@ const ExpenseParticipantEntry: React.FC<{
         </Button>
       </Link>
       <span className="text-gray-500">
-        {t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.${isPositive ? 'get' : 'owe'}`)}
+        {isSettled
+          ? t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.get`)
+          : t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.${isPositive ? 'get' : 'owe'}`)}
       </span>
       <span className={amountColorClass}>{toUIString(participant.amount)}</span>
+      {isSettled && (
+        <span className="text-xs text-gray-500">
+          ({t('ui.expense.completed_payment')} {toUIDate(participant.settledAt!, { time: true })})
+        </span>
+      )}
     </div>
   );
 };

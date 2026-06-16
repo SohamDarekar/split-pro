@@ -350,7 +350,7 @@ export const userRouter = createTRPCRouter({
     }),
 
   sendTestPushNotification: protectedProcedure.mutation(async ({ ctx }) => {
-    const { sentCount } = await sendPushNotificationToUsers([ctx.session.user.id], {
+    const { sentCount, error } = await sendPushNotificationToUsers([ctx.session.user.id], {
       title: 'SplitPro',
       message: 'Test notification from debug info',
       data: {
@@ -358,7 +358,7 @@ export const userRouter = createTRPCRouter({
       },
     });
 
-    return { sentCount };
+    return { sentCount, error };
   }),
 
   deleteFriend: protectedProcedure
