@@ -412,6 +412,7 @@
       "user": {
         "deleted": "deleted",
         "get": "gets",
+        "got": "got",
         "lent": "lent",
         "owe": "owes",
         "paid": "paid",
@@ -421,6 +422,7 @@
       "you": {
         "deleted": "deleted",
         "get": "get",
+        "got": "got",
         "lent": "lent",
         "owe": "owe",
         "paid": "paid",

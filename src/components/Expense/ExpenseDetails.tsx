@@ -145,6 +145,7 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
               participant={participant}
               userId={user.id}
               currency={expense.currency}
+              isFullySettled={isFullySettled(expense.expenseParticipants)}
             />
           ))}
         {expense.conversionTo && (
@@ -157,6 +158,7 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
                   participant={participant}
                   userId={user.id}
                   currency={expense.conversionTo!.currency}
+                  isFullySettled={isFullySettled(expense.conversionTo!.expenseParticipants)}
                 />
               ))}
           </>
@@ -166,18 +168,26 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
   );
 };
 
+function isFullySettled(participants: ExpenseDetailsOutput['expenseParticipants']): boolean {
+  const debtors = participants.filter((p) => p.amount < 0n);
+  return debtors.length > 0 && debtors.every((p) => null !== p.settledAt);
+}
+
 const ExpenseParticipantEntry: React.FC<{
   participant: ExpenseDetailsOutput['expenseParticipants'][number];
   userId: number;
   currency: string;
-}> = ({ participant, userId, currency }) => {
+  isFullySettled: boolean;
+}> = ({ participant, userId, currency, isFullySettled }) => {
   const { displayName, t, toUIDate, getCurrencyHelpersCached } = useTranslationWithUtils();
   const { toUIString } = getCurrencyHelpersCached(currency);
 
   const isCurrentUser = userId === participant.userId;
   const isPositive = participant.amount > 0n;
-  const isSettled = !isPositive && null !== participant.settledAt;
-  const amountColorClass = isPositive || isSettled ? 'text-positive' : 'text-negative';
+  const isSettledDebtor = !isPositive && null !== participant.settledAt;
+  const amountColorClass = isPositive || isSettledDebtor ? 'text-positive' : 'text-negative';
+
+  const verbKey = isPositive ? (isFullySettled ? 'got' : 'get') : isSettledDebtor ? 'paid' : 'owe';
 
   return (
     <div key={participant.userId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -188,12 +198,10 @@ const ExpenseParticipantEntry: React.FC<{
         </Button>
       </Link>
       <span className="text-gray-500">
-        {isSettled
-          ? t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.get`)
-          : t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.${isPositive ? 'get' : 'owe'}`)}
+        {t(`ui.expense.${isCurrentUser ? 'you' : 'user'}.${verbKey}`)}
       </span>
       <span className={amountColorClass}>{toUIString(participant.amount)}</span>
-      {isSettled && (
+      {isSettledDebtor && (
         <span className="text-xs text-gray-500">
           ({t('ui.expense.completed_payment')} {toUIDate(participant.settledAt!, { time: true })})
         </span>
