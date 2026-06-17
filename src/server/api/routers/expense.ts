@@ -19,15 +19,15 @@ import { type CurrencyCode, isCurrencyCode } from '~/lib/currency';
 import { SplitType } from '@prisma/client';
 import { DEFAULT_CATEGORY } from '~/lib/category';
 import { getUserMap } from './user';
-import { FriendBalance } from '~/components/Friend/FriendBalance';
 import { env } from '~/env';
 
-const PER_EXPENSE_EXCLUDED_SPLIT_TYPES: SplitType[] = [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION];
+const PER_EXPENSE_EXCLUDED_SPLIT_TYPES: SplitType[] = [
+  SplitType.SETTLEMENT,
+  SplitType.CURRENCY_CONVERSION,
+];
 
 export const expenseRouter = createTRPCRouter({
-  getSettlementMode: protectedProcedure.query(() => {
-    return { mode: env.SETTLEMENT_MODE };
-  }),
+  getSettlementMode: protectedProcedure.query(() => ({ mode: env.SETTLEMENT_MODE })),
 
   getCumulatedBalances: protectedProcedure.query(async ({ ctx }) => {
     if (env.SETTLEMENT_MODE === 'per_expense') {
@@ -50,6 +50,118 @@ export const expenseRouter = createTRPCRouter({
       .map((b) => ({ currency: b.currency, amount: b._sum.amount! }));
 
     return { youOwe, youGet };
+  }),
+
+  getMonthlyStats: protectedProcedure.query(async ({ ctx }) => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const userId = ctx.session.user.id;
+
+    const participants = await db.expenseParticipant.findMany({
+      where: {
+        userId,
+        expense: {
+          expenseDate: { gte: startOfMonth },
+          deletedAt: null,
+          splitType: { notIn: [SplitType.SETTLEMENT, SplitType.CURRENCY_CONVERSION] },
+        },
+      },
+      include: {
+        expense: {
+          select: {
+            name: true,
+            groupId: true,
+            currency: true,
+            category: true,
+            amount: true,
+            paidBy: true,
+            expenseDate: true,
+            group: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    type CurrencyMap = Map<string, bigint>;
+
+    const personal: CurrencyMap = new Map();
+    const group: CurrencyMap = new Map();
+    const byCategory = new Map<string, CurrencyMap>();
+    const byGroup = new Map<number, { name: string; totals: CurrencyMap }>();
+    const daysActive = new Set<string>();
+
+    let biggestExpense: { name: string; currency: string; amount: bigint } | null = null;
+    let expenseCount = 0;
+    const youPaidTotal: CurrencyMap = new Map();
+
+    for (const p of participants) {
+      const {
+        groupId,
+        currency,
+        category,
+        amount: expenseTotal,
+        paidBy,
+        group: grp,
+        name,
+        expenseDate,
+      } = p.expense;
+      const shareAmount = p.amount;
+
+      expenseCount++;
+      daysActive.add(expenseDate.toISOString().slice(0, 10));
+
+      // Personal vs group split
+      const target = groupId === null ? personal : group;
+      target.set(currency, (target.get(currency) ?? 0n) + shareAmount);
+
+      // Category breakdown
+      const catSection = category.includes(':') ? category.split(':')[0]! : category;
+      if (!byCategory.has(catSection)) {
+        byCategory.set(catSection, new Map());
+      }
+      const catMap = byCategory.get(catSection)!;
+      catMap.set(currency, (catMap.get(currency) ?? 0n) + shareAmount);
+
+      // Group breakdown
+      if (groupId !== null && grp) {
+        if (!byGroup.has(groupId)) {
+          byGroup.set(groupId, { name: grp.name, totals: new Map() });
+        }
+        const gMap = byGroup.get(groupId)!.totals;
+        gMap.set(currency, (gMap.get(currency) ?? 0n) + shareAmount);
+      }
+
+      // Biggest expense (by user's share)
+      if (!biggestExpense || shareAmount > biggestExpense.amount) {
+        biggestExpense = { name, currency, amount: shareAmount };
+      }
+
+      // How much user paid total (full expense amount, not just share)
+      if (paidBy === userId) {
+        youPaidTotal.set(currency, (youPaidTotal.get(currency) ?? 0n) + expenseTotal);
+      }
+    }
+
+    const toArray = (m: CurrencyMap) =>
+      [...m.entries()].map(([currency, amount]) => ({ currency, amount }));
+
+    return {
+      personal: toArray(personal),
+      group: toArray(group),
+      byCategory: [...byCategory.entries()].map(([category, totals]) => ({
+        category,
+        totals: toArray(totals),
+      })),
+      byGroup: [...byGroup.entries()].map(([groupId, { name, totals }]) => ({
+        groupId,
+        name,
+        totals: toArray(totals),
+      })),
+      biggestExpense,
+      expenseCount,
+      daysActive: daysActive.size,
+      youPaidTotal: toArray(youPaidTotal),
+    };
   }),
 
   getBalances: protectedProcedure.query(async ({ ctx }) => {

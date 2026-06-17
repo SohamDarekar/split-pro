@@ -10,6 +10,7 @@ import MainLayout from '~/components/Layout/MainLayout';
 import { NotificationModal } from '~/components/NotificationModal';
 import { Button } from '~/components/ui/button';
 import { ConvertibleBalance } from '~/components/Expense/ConvertibleBalance';
+import { MonthlyStats } from '~/components/Expense/MonthlyStats';
 import { useIsPwa } from '~/hooks/useIsPwa';
 import { useTranslationWithUtils } from '~/hooks/useTranslationWithUtils';
 import { type NextPageWithUser } from '~/types';
@@ -26,6 +27,7 @@ const BalancePage: NextPageWithUser = ({ user }) => {
   const isPerExpense = settlementModeQuery.data?.mode === 'per_expense';
   const balanceQuery = api.expense.getBalances.useQuery();
   const cumulatedQuery = api.expense.getCumulatedBalances.useQuery();
+  const monthlyStatsQuery = api.expense.getMonthlyStats.useQuery();
 
   const selectedCurrency = useCurrencyPreferenceStore((s) => s.getPreference());
   const setUserDefaultCurrency = useCurrencyPreferenceStore((s) => s.setUserDefaultCurrency);
@@ -85,7 +87,7 @@ const BalancePage: NextPageWithUser = ({ user }) => {
             <div className="mx-4 flex items-stretch justify-between gap-4">
               {selectedCurrency && isCurrencyCode(selectedCurrency) ? (
                 <CumulatedBalanceDisplay
-                  prefix={`${t('ui.total_balance')}`}
+                  prefix={t('ui.total_balance')}
                   cumulatedBalances={[
                     cumulatedQuery.data?.youOwe ?? [],
                     cumulatedQuery.data?.youGet ?? [],
@@ -108,6 +110,17 @@ const BalancePage: NextPageWithUser = ({ user }) => {
                 </>
               )}
             </div>
+
+            <MonthlyStats
+              personal={monthlyStatsQuery.data?.personal}
+              group={monthlyStatsQuery.data?.group}
+              byCategory={monthlyStatsQuery.data?.byCategory}
+              byGroup={monthlyStatsQuery.data?.byGroup}
+              biggestExpense={monthlyStatsQuery.data?.biggestExpense}
+              expenseCount={monthlyStatsQuery.data?.expenseCount}
+              daysActive={monthlyStatsQuery.data?.daysActive}
+              youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
+            />
 
             <div className="mt-5 flex flex-col gap-8 pb-36">
               {balanceQuery.data?.balances.map((balance) => (
