@@ -10,7 +10,6 @@ import MainLayout from '~/components/Layout/MainLayout';
 import { NotificationModal } from '~/components/NotificationModal';
 import { Button } from '~/components/ui/button';
 import { ConvertibleBalance } from '~/components/Expense/ConvertibleBalance';
-import { MonthlyStats } from '~/components/Expense/MonthlyStats';
 import { useIsPwa } from '~/hooks/useIsPwa';
 import { useTranslationWithUtils } from '~/hooks/useTranslationWithUtils';
 import { type NextPageWithUser } from '~/types';
@@ -27,7 +26,6 @@ const BalancePage: NextPageWithUser = ({ user }) => {
   const isPerExpense = settlementModeQuery.data?.mode === 'per_expense';
   const balanceQuery = api.expense.getBalances.useQuery();
   const cumulatedQuery = api.expense.getCumulatedBalances.useQuery();
-  const monthlyStatsQuery = api.expense.getMonthlyStats.useQuery();
 
   const selectedCurrency = useCurrencyPreferenceStore((s) => s.getPreference());
   const setUserDefaultCurrency = useCurrencyPreferenceStore((s) => s.setUserDefaultCurrency);
@@ -79,18 +77,8 @@ const BalancePage: NextPageWithUser = ({ user }) => {
         <NotificationModal />
 
         {isPerExpense ? (
-          <div className="mx-4 mt-5 flex flex-col gap-8 pb-36">
+          <div className="mx-4 mt-5 pb-36">
             <UnsettledExpenseList currentUserId={user.id} />
-            <MonthlyStats
-              personal={monthlyStatsQuery.data?.personal}
-              group={monthlyStatsQuery.data?.group}
-              byCategory={monthlyStatsQuery.data?.byCategory}
-              byGroup={monthlyStatsQuery.data?.byGroup}
-              biggestExpense={monthlyStatsQuery.data?.biggestExpense}
-              expenseCount={monthlyStatsQuery.data?.expenseCount}
-              daysActive={monthlyStatsQuery.data?.daysActive}
-              youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
-            />
           </div>
         ) : (
           <>
@@ -149,17 +137,6 @@ const BalancePage: NextPageWithUser = ({ user }) => {
                 </div>
               ) : null}
             </div>
-
-            <MonthlyStats
-              personal={monthlyStatsQuery.data?.personal}
-              group={monthlyStatsQuery.data?.group}
-              byCategory={monthlyStatsQuery.data?.byCategory}
-              byGroup={monthlyStatsQuery.data?.byGroup}
-              biggestExpense={monthlyStatsQuery.data?.biggestExpense}
-              expenseCount={monthlyStatsQuery.data?.expenseCount}
-              daysActive={monthlyStatsQuery.data?.daysActive}
-              youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
-            />
           </>
         )}
       </MainLayout>
