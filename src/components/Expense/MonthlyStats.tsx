@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { cn } from '~/lib/utils';
 import { getCurrencyHelpers } from '~/utils/numbers';
@@ -78,7 +79,7 @@ interface MonthlyStatsProps {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAmt(amount: bigint, currency: string): string {
-  if (!isCurrencyCode(currency)) return String(Number(amount) / 100);
+  if (!isCurrencyCode(currency)) {return String(Number(amount) / 100);}
   return getCurrencyHelpers({ currency }).toUIString(amount);
 }
 
@@ -218,12 +219,14 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
   daysActive = 0,
   youPaidTotal = [],
 }) => {
+  const [expanded, setExpanded] = useState(false);
+
   const now = new Date();
   const monthName = now.toLocaleString('default', { month: 'long' });
   const year = now.getFullYear();
 
   const hasAny = personal.length > 0 || group.length > 0;
-  if (!hasAny) return null;
+  if (!hasAny) {return null;}
 
   const allTotals = [...personal, ...group];
   const currencyFreq = allTotals.reduce<Record<string, number>>((acc, { currency }) => {
@@ -247,7 +250,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
       .sort((a, b) => (a.raw > b.raw ? -1 : 1));
 
     const total = filtered.reduce((s, c) => s + c.raw, 0n);
-    if (total === 0n) return [];
+    if (total === 0n) {return [];}
 
     return filtered.map((c, i) => ({
       name: c.name,
@@ -281,7 +284,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
   const paidMoreThanOwed = youPaid && personalAmt && youPaid.amount > personalAmt.amount;
 
   return (
-    <div className="mx-4 mt-6">
+    <div className="mx-4 mt-6 pb-8">
       {/* Header */}
       <div className="mb-4 flex items-baseline justify-between">
         <div>
@@ -302,9 +305,9 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
         </div>
       </div>
 
-      {/* Total spent hero card */}
+      {/* Hero card — always visible */}
       <div className="mb-4 overflow-hidden rounded-3xl p-5" style={HERO_CARD_STYLE}>
-        <p className="text-xs font-medium tracking-widest text-white/50 uppercase">
+        <p className="text-xs font-medium uppercase tracking-widest text-white/50">
           total you spent
         </p>
         <p className="mt-1 text-4xl font-black tracking-tight text-white" style={GLOW_STYLE}>
@@ -355,10 +358,10 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
         </div>
       </div>
 
-      {/* Category breakdown */}
-      {catData.length > 1 && (
+      {/* Category donut — always visible */}
+      {catData.length > 0 && (
         <div className="mb-4 overflow-hidden rounded-3xl p-5" style={DARK_CARD_STYLE}>
-          <p className="mb-1 text-xs font-medium tracking-widest text-white/50 uppercase">
+          <p className="mb-1 text-xs font-medium uppercase tracking-widest text-white/50">
             spending by category
           </p>
           <div className="flex gap-4">
@@ -372,41 +375,71 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
         </div>
       )}
 
-      {/* Group breakdown */}
-      {groupData.length > 0 && (
-        <div className="mb-4 overflow-hidden rounded-3xl p-5" style={DARK_CARD_STYLE}>
-          <p className="mb-3 text-xs font-medium tracking-widest text-white/50 uppercase">
-            spending by group
-          </p>
-          <div className="flex flex-col gap-3">
-            {groupData.map((g) => (
-              <GroupBar key={g.name} name={g.name} amount={g.amount} pct={g.pct} color={g.color} />
-            ))}
-          </div>
-          {groupData[0] && (
-            <p className="mt-3 text-xs text-white/40">
-              🏆 Most active: <span className="font-medium text-white/70">{groupData[0].name}</span>
-            </p>
+      {/* See more / less toggle */}
+      {(groupData.length > 0 || biggestExpense) && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-white/10 py-2.5 text-sm text-white/60 transition-colors hover:text-white/90"
+        >
+          {expanded ? (
+            <>
+              See less <ChevronUp className="h-4 w-4" />
+            </>
+          ) : (
+            <>
+              See more <ChevronDown className="h-4 w-4" />
+            </>
           )}
-        </div>
+        </button>
       )}
 
-      {/* Biggest expense card */}
-      {biggestExpense && (
-        <div
-          className="mb-4 flex items-center justify-between overflow-hidden rounded-3xl px-5 py-4"
-          style={BIGGEST_CARD_STYLE}
-        >
-          <div>
-            <p className="text-xs font-medium tracking-widest text-white/50 uppercase">
-              biggest expense
-            </p>
-            <p className="mt-0.5 text-base font-bold text-white">{biggestExpense.name}</p>
-          </div>
-          <p className="text-xl font-black text-purple-400">
-            {formatAmt(biggestExpense.amount, biggestExpense.currency)}
-          </p>
-        </div>
+      {/* Expanded content */}
+      {expanded && (
+        <>
+          {/* Group breakdown */}
+          {groupData.length > 0 && (
+            <div className="mb-4 overflow-hidden rounded-3xl p-5" style={DARK_CARD_STYLE}>
+              <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/50">
+                spending by group
+              </p>
+              <div className="flex flex-col gap-3">
+                {groupData.map((g) => (
+                  <GroupBar
+                    key={g.name}
+                    name={g.name}
+                    amount={g.amount}
+                    pct={g.pct}
+                    color={g.color}
+                  />
+                ))}
+              </div>
+              {groupData[0] && (
+                <p className="mt-3 text-xs text-white/40">
+                  🏆 Most active:{' '}
+                  <span className="font-medium text-white/70">{groupData[0].name}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Biggest expense */}
+          {biggestExpense && (
+            <div
+              className="mb-4 flex items-center justify-between overflow-hidden rounded-3xl px-5 py-4"
+              style={BIGGEST_CARD_STYLE}
+            >
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-white/50">
+                  biggest expense
+                </p>
+                <p className="mt-0.5 text-base font-bold text-white">{biggestExpense.name}</p>
+              </div>
+              <p className="text-xl font-black text-purple-400">
+                {formatAmt(biggestExpense.amount, biggestExpense.currency)}
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

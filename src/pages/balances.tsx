@@ -79,7 +79,8 @@ const BalancePage: NextPageWithUser = ({ user }) => {
         <NotificationModal />
 
         {isPerExpense ? (
-          <>
+          <div className="mx-4 mt-5 flex flex-col gap-8 pb-36">
+            <UnsettledExpenseList currentUserId={user.id} />
             <MonthlyStats
               personal={monthlyStatsQuery.data?.personal}
               group={monthlyStatsQuery.data?.group}
@@ -90,10 +91,7 @@ const BalancePage: NextPageWithUser = ({ user }) => {
               daysActive={monthlyStatsQuery.data?.daysActive}
               youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
             />
-            <div className="mx-4 mt-5 pb-36">
-              <UnsettledExpenseList currentUserId={user.id} />
-            </div>
-          </>
+          </div>
         ) : (
           <>
             <div className="mx-4 flex items-stretch justify-between gap-4">
@@ -123,17 +121,6 @@ const BalancePage: NextPageWithUser = ({ user }) => {
               )}
             </div>
 
-            <MonthlyStats
-              personal={monthlyStatsQuery.data?.personal}
-              group={monthlyStatsQuery.data?.group}
-              byCategory={monthlyStatsQuery.data?.byCategory}
-              byGroup={monthlyStatsQuery.data?.byGroup}
-              biggestExpense={monthlyStatsQuery.data?.biggestExpense}
-              expenseCount={monthlyStatsQuery.data?.expenseCount}
-              daysActive={monthlyStatsQuery.data?.daysActive}
-              youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
-            />
-
             <div className="mt-5 flex flex-col gap-8 pb-36">
               {balanceQuery.data?.balances.map((balance) => (
                 <BalanceEntry
@@ -162,6 +149,17 @@ const BalancePage: NextPageWithUser = ({ user }) => {
                 </div>
               ) : null}
             </div>
+
+            <MonthlyStats
+              personal={monthlyStatsQuery.data?.personal}
+              group={monthlyStatsQuery.data?.group}
+              byCategory={monthlyStatsQuery.data?.byCategory}
+              byGroup={monthlyStatsQuery.data?.byGroup}
+              biggestExpense={monthlyStatsQuery.data?.biggestExpense}
+              expenseCount={monthlyStatsQuery.data?.expenseCount}
+              daysActive={monthlyStatsQuery.data?.daysActive}
+              youPaidTotal={monthlyStatsQuery.data?.youPaidTotal}
+            />
           </>
         )}
       </MainLayout>
