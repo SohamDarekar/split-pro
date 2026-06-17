@@ -1,6 +1,6 @@
-import { BadgeInfo, CreditCard, Download, FileDown } from 'lucide-react';
+import { BadgeInfo, CreditCard, Download, FileDown, ShieldCheck } from 'lucide-react';
 import type { GetServerSideProps } from 'next';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { useTranslation } from 'next-i18next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -35,6 +35,7 @@ const AccountPage: NextPageWithUser<{
 }> = ({ feedBackPossible, bankConnectionEnabled, bankConnection, maxUploadFileSizeMB }) => {
   const { t } = useTranslation();
   const router = useRouter();
+  const { data: session } = useSession();
   const userQuery = api.user.me.useQuery();
   const downloadQuery = api.user.downloadData.useMutation();
   const updateDetailsMutation = api.user.updateUserDetail.useMutation();
@@ -140,6 +141,13 @@ const AccountPage: NextPageWithUser<{
               {t('account.debug_info')}
             </AccountButton>
           </DebugInfo>
+
+          {session?.user?.isAdmin && (
+            <AccountButton href="/admin">
+              <ShieldCheck className="text-primary size-5" />
+              Admin Panel
+            </AccountButton>
+          )}
         </div>
 
         <div className="mt-2 flex justify-center">

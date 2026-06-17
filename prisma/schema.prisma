@@ -66,6 +66,7 @@ model User {
   sessions             Session[]
   hiddenFriendIds      Int[]                @default([])
   paymentReminders     PaymentReminder[]
+  isAdmin              Boolean              @default(false)
 
   @@schema("public")
 }

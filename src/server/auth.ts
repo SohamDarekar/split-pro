@@ -30,8 +30,7 @@ declare module 'next-auth' {
       bankingId?: string;
       preferredLanguage: string;
       hiddenFriendIds: number[];
-      // ...other properties
-      // Role: UserRole;
+      isAdmin: boolean;
     };
   }
 
@@ -46,6 +45,7 @@ declare module 'next-auth' {
     bankingId?: string;
     preferredLanguage: string;
     hiddenFriendIds: number[];
+    isAdmin: boolean;
   }
 }
 
@@ -122,16 +122,26 @@ export const authOptions: NextAuthOptions = {
         bankingId: user.bankingId,
         preferredLanguage: user.preferredLanguage,
         hiddenFriendIds: user.hiddenFriendIds,
+        isAdmin: user.isAdmin,
       },
     }),
     async signIn({ user, email }) {
-      if (email?.verificationRequest && env.DISABLE_EMAIL_SIGNUP) {
-        const existingUser = await db.user.findUnique({
-          where: { email: user.email },
-        });
+      if (email?.verificationRequest) {
+        if (env.DISABLE_EMAIL_SIGNUP) {
+          const existingUser = await db.user.findUnique({ where: { email: user.email } });
+          if (!existingUser) {
+            return `${getBaseUrl()}/auth/signin?error=SignupDisabled`;
+          }
+        }
 
-        if (!existingUser) {
-          return `${getBaseUrl()}/auth/signin?error=SignupDisabled`;
+        const registrationsDisabled = await db.appMetadata.findUnique({
+          where: { key: 'registrations_disabled' },
+        });
+        if (registrationsDisabled?.value === 'true') {
+          const existingUser = await db.user.findUnique({ where: { email: user.email } });
+          if (!existingUser) {
+            return `${getBaseUrl()}/auth/signin?error=SignupDisabled`;
+          }
         }
       }
 

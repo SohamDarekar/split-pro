@@ -61,6 +61,7 @@ export const SelectUserOrGroup: React.FC<{
           bankingId: null,
           preferredLanguage: '',
           hiddenFriendIds: [],
+          isAdmin: false,
         });
         // Add email to split pro
       }
