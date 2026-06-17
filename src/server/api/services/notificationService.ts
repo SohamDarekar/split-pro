@@ -3,6 +3,7 @@ import { isCurrencyCode } from '~/lib/currency';
 import { type PushMessage } from '~/types';
 
 import { db } from '~/server/db';
+import { sendPaymentReminderEmail } from '~/server/mailer';
 import { pushNotification } from '~/server/notification';
 import { getCurrencyHelpers } from '~/utils/numbers';
 
@@ -320,5 +321,183 @@ export async function checkRecurrenceNotifications() {
     console.error('Error sending recurrence notifications', e);
   } finally {
     setTimeout(checkRecurrenceNotifications, 1000 * 60); // Check every minute
+  }
+}
+
+const REMINDER_DAYS = [1, 3, 5, 7, 10, 15, 20, 25, 30];
+
+const getReminderDayOffset = (daysElapsed: number): number | null => {
+  if (daysElapsed <= 0) {
+    return null;
+  }
+  // Exact match for scheduled days up to 30
+  if (REMINDER_DAYS.includes(daysElapsed)) {
+    return daysElapsed;
+  }
+  // Daily after day 30
+  if (daysElapsed > 30) {
+    return daysElapsed;
+  }
+  return null;
+};
+
+const getReminderContent = (
+  payerName: string,
+  expenseName: string,
+  amount: string,
+  daysOutstanding: number,
+): { title: string; message: string } => {
+  if (daysOutstanding <= 1) {
+    return {
+      title: `Reminder from ${payerName}`,
+      message: `${payerName} paid ${amount} for "${expenseName}". Settle up when you get a chance!`,
+    };
+  }
+  if (daysOutstanding <= 3) {
+    return {
+      title: `Just a heads-up from ${payerName}`,
+      message: `${payerName} is still waiting on ${amount} for "${expenseName}". No rush, but please settle soon.`,
+    };
+  }
+  if (daysOutstanding <= 5) {
+    return {
+      title: `${payerName} is waiting`,
+      message: `It's been ${daysOutstanding} days — ${payerName} paid ${amount} for "${expenseName}". Please settle up.`,
+    };
+  }
+  if (daysOutstanding <= 7) {
+    return {
+      title: `Please settle up with ${payerName}`,
+      message: `A week has passed since ${payerName} paid ${amount} for "${expenseName}". Kindly reimburse them soon.`,
+    };
+  }
+  if (daysOutstanding <= 10) {
+    return {
+      title: `Action needed: ${amount} owed to ${payerName}`,
+      message: `${daysOutstanding} days overdue — ${payerName} paid ${amount} for "${expenseName}". Please settle this now.`,
+    };
+  }
+  if (daysOutstanding <= 15) {
+    return {
+      title: `Overdue: ${amount} owed to ${payerName}`,
+      message: `${payerName} paid ${amount} for "${expenseName}" ${daysOutstanding} days ago. This needs to be settled immediately.`,
+    };
+  }
+  if (daysOutstanding <= 25) {
+    return {
+      title: `OVERDUE: Pay ${payerName} ${amount}`,
+      message: `${daysOutstanding} days overdue. ${payerName} paid ${amount} for "${expenseName}". Stop ignoring this — settle now.`,
+    };
+  }
+  return {
+    title: `URGENT: ${daysOutstanding} days overdue`,
+    message: `You owe ${payerName} ${amount} for "${expenseName}". This is ${daysOutstanding} days overdue. Settle immediately.`,
+  };
+};
+
+export async function checkPaymentReminders() {
+  try {
+    const now = new Date();
+
+    const unsettledParticipants = await db.expenseParticipant.findMany({
+      where: {
+        settledAt: null,
+        amount: { not: 0n },
+        expense: {
+          deletedAt: null,
+          splitType: { not: SplitType.SETTLEMENT },
+        },
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+        expense: {
+          select: {
+            id: true,
+            name: true,
+            amount: true,
+            currency: true,
+            createdAt: true,
+            paidBy: true,
+            paidByUser: { select: { name: true, email: true } },
+          },
+        },
+      },
+    });
+
+    await Promise.all(
+      unsettledParticipants.map(async (participant) => {
+        const { expense, user } = participant;
+
+        // Skip if participant is the payer
+        if (user.id === expense.paidBy) {
+          return;
+        }
+
+        const msElapsed = now.getTime() - expense.createdAt.getTime();
+        const daysElapsed = Math.floor(msElapsed / (1000 * 60 * 60 * 24));
+
+        const dayOffset = getReminderDayOffset(daysElapsed);
+        if (dayOffset === null) {
+          return;
+        }
+
+        // Check if reminder already sent for this day offset
+        const existing = await db.paymentReminder.findUnique({
+          where: {
+            expenseId_userId_dayOffset: {
+              expenseId: expense.id,
+              userId: user.id,
+              dayOffset,
+            },
+          },
+        });
+        if (existing) {
+          return;
+        }
+
+        const { toUIString } = getCurrencyHelpers({
+          currency: isCurrencyCode(expense.currency) ? expense.currency : 'USD',
+        });
+        const amountStr = toUIString(expense.amount);
+        const payerName = expense.paidByUser?.name ?? expense.paidByUser?.email ?? 'Someone';
+
+        const pushContent = getReminderContent(payerName, expense.name, amountStr, daysElapsed);
+
+        // Send push notification
+        await sendPushNotificationToUsers([user.id], {
+          ...pushContent,
+          data: { url: `/expenses/${expense.id}` },
+        });
+
+        // Send email on day 10+
+        if (daysElapsed >= 10 && user.email) {
+          const appUrl = process.env.NEXTAUTH_URL ?? '';
+          await sendPaymentReminderEmail(user.email, {
+            recipientName: user.name ?? user.email,
+            payerName,
+            expenseName: expense.name,
+            amount: amountStr,
+            expenseUrl: `${appUrl}/expenses/${expense.id}`,
+            daysOutstanding: daysElapsed,
+          });
+        }
+
+        // Record reminder sent
+        await db.paymentReminder.create({
+          data: {
+            expenseId: expense.id,
+            userId: user.id,
+            dayOffset,
+          },
+        });
+      }),
+    );
+  } catch (e) {
+    console.error('Error checking payment reminders', e);
+  } finally {
+    // Re-check every hour
+    setTimeout(checkPaymentReminders, 1000 * 60 * 60);
   }
 }

@@ -41,7 +41,7 @@ export const SimpleConfirmationDialog: React.FC<
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof controlledOpen === 'boolean';
-  const open = isControlled ? controlledOpen! : internalOpen;
+  const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
 
   return (
@@ -56,6 +56,7 @@ export const SimpleConfirmationDialog: React.FC<
           <AlertDialogCancel onClick={onCancel}>{t('actions.cancel')}</AlertDialogCancel>
           {hasPermission && (
             <form
+              className="w-full"
               onSubmit={async (e) => {
                 e.preventDefault();
                 await onConfirm();
@@ -64,7 +65,7 @@ export const SimpleConfirmationDialog: React.FC<
             >
               <Button
                 type="submit"
-                size="sm"
+                className="w-full"
                 variant={variant}
                 disabled={loading}
                 loading={loading}
