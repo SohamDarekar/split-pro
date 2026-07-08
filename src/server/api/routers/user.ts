@@ -29,13 +29,33 @@ export const userRouter = createTRPCRouter({
   me: protectedProcedure.query(({ ctx }) => ctx.session.user),
 
   getFriends: protectedProcedure.query(async ({ ctx }) => {
-    const friends = await db.balanceView.findMany({
+    const balanceFriends = await db.balanceView.findMany({
       where: { userId: ctx.session.user.id, friendId: { notIn: ctx.session.user.hiddenFriendIds } },
       include: { friend: true },
       distinct: ['friendId'],
     });
 
-    return friends.map((f) => f.friend);
+    const groupCoMembers = await db.user.findMany({
+      where: {
+        id: { notIn: [...ctx.session.user.hiddenFriendIds, ctx.session.user.id] },
+        associatedGroups: {
+          some: {
+            group: {
+              groupUsers: { some: { userId: ctx.session.user.id } },
+            },
+          },
+        },
+      },
+    });
+
+    const friendMap = new Map(balanceFriends.map((f) => [f.friend.id, f.friend]));
+    for (const user of groupCoMembers) {
+      if (!friendMap.has(user.id)) {
+        friendMap.set(user.id, user);
+      }
+    }
+
+    return [...friendMap.values()];
   }),
 
   getOwnExpenses: protectedProcedure.query(async ({ ctx }) => {
@@ -195,11 +215,14 @@ export const userRouter = createTRPCRouter({
       const friend = await db.user.findUnique({
         where: {
           id: input.friendId,
-          userBalances: {
-            some: {
-              friendId: ctx.session.user.id,
+          OR: [
+            { userBalances: { some: { friendId: ctx.session.user.id } } },
+            {
+              associatedGroups: {
+                some: { group: { groupUsers: { some: { userId: ctx.session.user.id } } } },
+              },
             },
-          },
+          ],
         },
       });
 
@@ -254,11 +277,14 @@ export const userRouter = createTRPCRouter({
       const friend = await db.user.findUnique({
         where: {
           id: input.friendId,
-          userBalances: {
-            some: {
-              friendId: ctx.session.user.id,
+          OR: [
+            { userBalances: { some: { friendId: ctx.session.user.id } } },
+            {
+              associatedGroups: {
+                some: { group: { groupUsers: { some: { userId: ctx.session.user.id } } } },
+              },
             },
-          },
+          ],
         },
       });
 
