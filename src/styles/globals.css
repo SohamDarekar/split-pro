@@ -218,14 +218,14 @@
 }
 
 [data-accent='red'] {
-  --primary: hsl(0 72% 51%);
+  --primary: hsl(353 96% 57%);
   --primary-foreground: hsl(0 0% 100%);
-  --ring: hsl(0 72% 51%);
+  --ring: hsl(353 96% 57%);
 }
 .dark[data-accent='red'] {
-  --primary: hsl(0 91% 68%);
-  --primary-foreground: hsl(224 71.4% 4.1%);
-  --ring: hsl(0 91% 68%);
+  --primary: hsl(353 96% 62%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(353 96% 62%);
 }
 
 [data-accent='orange'] {

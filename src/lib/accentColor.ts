@@ -22,7 +22,7 @@ export const ACCENT_COLOR_SWATCH_CLASS: Record<AccentColor, string> = {
   blue: 'bg-blue-500',
   purple: 'bg-purple-500',
   lime: 'bg-lime-500',
-  red: 'bg-red-500',
+  red: 'bg-[#fa233b]',
   orange: 'bg-orange-500',
   pink: 'bg-pink-500',
 };
