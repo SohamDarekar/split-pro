@@ -68,6 +68,7 @@ export const UserInput: React.FC<{
         preferredLanguage: '',
         hiddenFriendIds: [],
         isAdmin: false,
+        accentColor: 'default',
       });
     }
   };

@@ -62,6 +62,7 @@ export const SelectUserOrGroup: React.FC<{
           preferredLanguage: '',
           hiddenFriendIds: [],
           isAdmin: false,
+          accentColor: 'default',
         });
         // Add email to split pro
       }

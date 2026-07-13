@@ -3,6 +3,7 @@ import { type User } from 'next-auth';
 import { z } from 'zod';
 
 import { env } from '~/env';
+import { ACCENT_COLORS } from '~/lib/accentColor';
 import {
   deserializeDefaultSplit,
   serializeDefaultSplit,
@@ -176,6 +177,7 @@ export const userRouter = createTRPCRouter({
         obapiProviderId: z.string().optional(),
         bankingId: z.string().optional(),
         preferredLanguage: z.string().optional(),
+        accentColor: z.enum(ACCENT_COLORS).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {

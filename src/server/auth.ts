@@ -31,6 +31,7 @@ declare module 'next-auth' {
       preferredLanguage: string;
       hiddenFriendIds: number[];
       isAdmin: boolean;
+      accentColor: string;
     };
   }
 
@@ -46,6 +47,7 @@ declare module 'next-auth' {
     preferredLanguage: string;
     hiddenFriendIds: number[];
     isAdmin: boolean;
+    accentColor: string;
   }
 }
 
@@ -123,6 +125,7 @@ export const authOptions: NextAuthOptions = {
         preferredLanguage: user.preferredLanguage,
         hiddenFriendIds: user.hiddenFriendIds,
         isAdmin: user.isAdmin,
+        accentColor: user.accentColor,
       },
     }),
     async signIn({ user, email }) {

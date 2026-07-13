@@ -1,5 +1,17 @@
 {
   "account": {
+    "accent_color": {
+      "title": "Accent color",
+      "colors": {
+        "default": "Default",
+        "blue": "Blue",
+        "purple": "Purple",
+        "lime": "Lime",
+        "red": "Red",
+        "orange": "Orange",
+        "pink": "Pink"
+      }
+    },
     "change_language": "Change language",
     "change_language_details": {
       "messages": {

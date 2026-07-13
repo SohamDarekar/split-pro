@@ -27,6 +27,7 @@ const createMockUser = (id: number, name: string, email: string): User => ({
   bankingId: null,
   hiddenFriendIds: [],
   isAdmin: false,
+  accentColor: 'default',
 });
 
 const user1: User = createMockUser(1, 'Alice', 'alice@example.com');

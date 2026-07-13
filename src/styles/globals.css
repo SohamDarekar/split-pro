@@ -177,6 +177,79 @@
   --ring: hsl(221 39% 11%);
 }
 
+/*
+  Per-user accent color. `data-accent="default"` (or the attribute being
+  absent) keeps the original --primary/--ring values defined above. Every
+  other accent overrides --primary/--primary-foreground/--ring, which
+  cascades into every component that already keys off those vars (buttons,
+  focus rings, nprogress bar, active nav icons, etc).
+*/
+[data-accent='blue'] {
+  --primary: hsl(217 91% 60%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(217 91% 60%);
+}
+.dark[data-accent='blue'] {
+  --primary: hsl(213 94% 68%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(213 94% 68%);
+}
+
+[data-accent='purple'] {
+  --primary: hsl(262 83% 58%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(262 83% 58%);
+}
+.dark[data-accent='purple'] {
+  --primary: hsl(263 85% 70%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(263 85% 70%);
+}
+
+[data-accent='lime'] {
+  --primary: hsl(83 78% 38%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(83 78% 38%);
+}
+.dark[data-accent='lime'] {
+  --primary: hsl(83 78% 55%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(83 78% 55%);
+}
+
+[data-accent='red'] {
+  --primary: hsl(0 72% 51%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(0 72% 51%);
+}
+.dark[data-accent='red'] {
+  --primary: hsl(0 91% 68%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(0 91% 68%);
+}
+
+[data-accent='orange'] {
+  --primary: hsl(24.6 95% 48%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(24.6 95% 48%);
+}
+.dark[data-accent='orange'] {
+  --primary: hsl(20.5 90% 60%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(20.5 90% 60%);
+}
+
+[data-accent='pink'] {
+  --primary: hsl(330 81% 55%);
+  --primary-foreground: hsl(0 0% 100%);
+  --ring: hsl(330 81% 55%);
+}
+.dark[data-accent='pink'] {
+  --primary: hsl(330 81% 68%);
+  --primary-foreground: hsl(224 71.4% 4.1%);
+  --ring: hsl(330 81% 68%);
+}
+
 @layer base {
   * {
     @apply border-border;

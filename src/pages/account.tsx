@@ -4,8 +4,9 @@ import { signOut, useSession } from 'next-auth/react';
 import { useTranslation } from 'next-i18next';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { AccentColorPicker } from '~/components/Account/AccentColorPicker';
 import { AccountButton } from '~/components/Account/AccountButton';
 import { DownloadAppDrawer } from '~/components/Account/DownloadAppDrawer';
 import { SubmitFeedback } from '~/components/Account/SubmitFeedback';
@@ -25,6 +26,7 @@ import {
 import { api } from '~/utils/api';
 import type { NextPageWithUser } from '~/types';
 import { DebugInfo } from '~/components/Account/DebugInfo';
+import { type AccentColor, DEFAULT_ACCENT_COLOR, isAccentColor } from '~/lib/accentColor';
 import { useAppStore } from '~/store/appStore';
 
 const AccountPage: NextPageWithUser<{
@@ -45,6 +47,14 @@ const AccountPage: NextPageWithUser<{
   setMaxUploadFileSizeMB(maxUploadFileSizeMB);
 
   const [downloading, setDownloading] = useState(false);
+  const [accentColor, setAccentColor] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
+
+  useEffect(() => {
+    const savedAccentColor = userQuery.data?.accentColor;
+    if (savedAccentColor && isAccentColor(savedAccentColor)) {
+      setAccentColor(savedAccentColor);
+    }
+  }, [userQuery.data?.accentColor]);
 
   const downloadData = useCallback(async () => {
     setDownloading(true);
@@ -122,6 +132,8 @@ const AccountPage: NextPageWithUser<{
           {feedBackPossible && <SubmitFeedback />}
 
           <SubscribeNotification />
+
+          <AccentColorPicker accentColor={accentColor} onAccentColorChange={setAccentColor} />
 
           <DownloadAppDrawer>
             <AccountButton>

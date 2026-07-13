@@ -123,6 +123,12 @@ const Auth: React.FC<{ Page: NextPageWithUser; pageProps: any }> = ({ Page, page
 
   useEffect(() => {
     if ('authenticated' === status && data.user) {
+      document.documentElement.dataset.accent = data.user.accentColor || 'default';
+    }
+  }, [status, data?.user]);
+
+  useEffect(() => {
+    if ('authenticated' === status && data.user) {
       if (!data.user.preferredLanguage) {
         // If user has no preferred language, set it to the current locale
         const currentLocale = router.locale ?? 'en';
