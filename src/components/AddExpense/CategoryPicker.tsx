@@ -27,7 +27,7 @@ export const CategoryPicker: React.FC<{
 
   const trigger = useMemo(
     () => (
-      <div className="relative flex h-10 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-sm">
+      <div className="bg-muted/60 hover:bg-muted relative flex h-12 cursor-pointer items-center gap-1.5 rounded-xl border border-transparent px-3.5 text-sm transition-colors duration-150">
         <CategoryIcon category={category} size={16} className="shrink-0" />
         <span className="max-w-[90px] truncate">{categoryLabel}</span>
         <ChevronDown size={14} className="text-muted-foreground shrink-0" />

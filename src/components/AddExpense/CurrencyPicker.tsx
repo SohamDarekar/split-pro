@@ -35,7 +35,10 @@ function CurrencyPickerInner({
 
   const trigger = useMemo(
     () => (
-      <Button variant="outline" className="w-[70px] rounded-lg py-2 text-base">
+      <Button
+        variant="outline"
+        className="bg-muted/60 hover:bg-muted h-12 w-[74px] rounded-xl border-transparent text-base font-medium"
+      >
         {currentCurrency ?? ''}
       </Button>
     ),

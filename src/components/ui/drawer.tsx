@@ -259,7 +259,7 @@ export const AppDrawer: React.FC<AppDrawerProps> = (props) => {
                 ) : (
                   <DialogClose
                     onClick={actionOnClick}
-                    className="bg-primary w-[100px] rounded-md py-2 text-sm text-black disabled:opacity-50"
+                    className="bg-primary text-primary-foreground w-[100px] rounded-md py-2 text-sm disabled:opacity-50"
                     disabled={actionDisabled}
                   >
                     {actionTitle}

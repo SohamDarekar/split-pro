@@ -316,7 +316,7 @@ export const AddOrEditExpensePage: React.FC<{
         <SelectUserOrGroup enableSendingInvites={enableSendingInvites} />
       ) : (
         <>
-          <div className="mt-4 flex gap-2 sm:mt-10">
+          <div className="mt-4 flex gap-2.5 sm:mt-10">
             <CategoryPicker category={category} onCategoryPick={setCategory} />
             <Input
               placeholder={t('expense_details.add_expense_details.description_placeholder')}
@@ -326,7 +326,7 @@ export const AddOrEditExpensePage: React.FC<{
               autoFocus
             />
           </div>
-          <div className="flex gap-2">
+          <div className="mt-3 flex gap-2.5">
             <CurrencyPicker currentCurrency={currency} onCurrencyPick={onCurrencyPick} />
             <CurrencyInput
               placeholder={t('expense_details.add_expense_details.amount_placeholder')}
@@ -413,7 +413,7 @@ export const AddOrEditExpensePage: React.FC<{
                   className="hover:text-foreground/80 items-center justify-between px-2"
                 >
                   <Landmark
-                    className={cn(transactionId ? 'text-primary' : 'text-white-500', 'h-6 w-6')}
+                    className={cn(transactionId ? 'text-primary' : 'text-gray-500', 'h-6 w-6')}
                   />
                 </Button>
               </AddBankTransactions>
