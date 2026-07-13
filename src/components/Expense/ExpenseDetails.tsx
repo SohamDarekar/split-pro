@@ -3,7 +3,7 @@ import { isSameDay } from 'date-fns';
 import { type User as NextUser } from 'next-auth';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { ArrowRightIcon, Landmark, Merge, PencilIcon, Users } from 'lucide-react';
+import { ArrowRightIcon, CheckCircle2, Landmark, Merge, PencilIcon, Users } from 'lucide-react';
 import Link from 'next/link';
 import React, { type ComponentProps, useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -56,6 +56,11 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
   }, [t, expense.recurrence, cronParser]);
 
   const { toUIString } = getCurrencyHelpersCached(expense.currency);
+
+  const apiUtils = api.useUtils();
+  const onSettled = useCallback(() => {
+    apiUtils.invalidate().catch(console.error);
+  }, [apiUtils]);
 
   return (
     <>
@@ -146,6 +151,9 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
               userId={user.id}
               currency={expense.currency}
               isFullySettled={isFullySettled(expense.expenseParticipants)}
+              expenseId={expense.id}
+              splitType={expense.splitType}
+              onSettled={onSettled}
             />
           ))}
         {expense.conversionTo && (
@@ -178,7 +186,10 @@ const ExpenseParticipantEntry: React.FC<{
   userId: number;
   currency: string;
   isFullySettled: boolean;
-}> = ({ participant, userId, currency, isFullySettled }) => {
+  expenseId?: string;
+  splitType?: SplitType;
+  onSettled?: () => void;
+}> = ({ participant, userId, currency, isFullySettled, expenseId, splitType, onSettled }) => {
   const { displayName, t, toUIDate, getCurrencyHelpersCached } = useTranslationWithUtils();
   const { toUIString } = getCurrencyHelpersCached(currency);
 
@@ -188,6 +199,31 @@ const ExpenseParticipantEntry: React.FC<{
   const amountColorClass = isPositive || isSettledDebtor ? 'text-positive' : 'text-negative';
 
   const verbKey = isPositive ? (isFullySettled ? 'got' : 'get') : isSettledDebtor ? 'paid' : 'owe';
+
+  const settleMutation = api.expense.settleExpenseForUser.useMutation();
+
+  const canSettleForMe =
+    isCurrentUser &&
+    !isPositive &&
+    !isSettledDebtor &&
+    expenseId !== undefined &&
+    splitType !== SplitType.SETTLEMENT;
+
+  const handleSettleForMe = useCallback(() => {
+    if (!expenseId) {
+      return;
+    }
+    settleMutation.mutate(
+      { expenseId, userId },
+      {
+        onSuccess: onSettled,
+        onError: (error) => {
+          console.error('Error while settling expense:', error);
+          toast.error(t('errors.setting_update_failed'));
+        },
+      },
+    );
+  }, [expenseId, userId, settleMutation, onSettled, t]);
 
   return (
     <div key={participant.userId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -205,6 +241,18 @@ const ExpenseParticipantEntry: React.FC<{
         <span className="text-xs text-gray-500">
           ({t('ui.expense.completed_payment')} {toUIDate(participant.settledAt!, { time: true })})
         </span>
+      )}
+      {canSettleForMe && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          disabled={settleMutation.isPending}
+          onClick={handleSettleForMe}
+        >
+          <CheckCircle2 className="mr-1 size-3" />
+          {t('actions.settle_for_me')}
+        </Button>
       )}
     </div>
   );
