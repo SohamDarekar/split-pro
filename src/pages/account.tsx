@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AccentColorPicker } from '~/components/Account/AccentColorPicker';
 import { AccountButton } from '~/components/Account/AccountButton';
+import { BillReminders } from '~/components/Account/BillReminders/BillReminders';
 import { DownloadAppDrawer } from '~/components/Account/DownloadAppDrawer';
 import { SubmitFeedback } from '~/components/Account/SubmitFeedback';
 import { SubscribeNotification } from '~/components/Account/SubscribeNotification';
@@ -132,6 +133,8 @@ const AccountPage: NextPageWithUser<{
           {feedBackPossible && <SubmitFeedback />}
 
           <SubscribeNotification />
+
+          <BillReminders />
 
           <AccentColorPicker accentColor={accentColor} onAccentColorChange={setAccentColor} />
 

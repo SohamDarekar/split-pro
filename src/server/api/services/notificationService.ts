@@ -1,4 +1,4 @@
-import { SplitType } from '@prisma/client';
+import { BillReminderStatus, SplitType } from '@prisma/client';
 import { isCurrencyCode } from '~/lib/currency';
 import { type PushMessage } from '~/types';
 
@@ -6,6 +6,19 @@ import { db } from '~/server/db';
 import { sendPaymentReminderEmail } from '~/server/mailer';
 import { pushNotification } from '~/server/notification';
 import { getCurrencyHelpers } from '~/utils/numbers';
+import { refreshOverdueStatuses } from './billReminderService';
+import {
+  CREATOR_OVERDUE_COPY,
+  CREATOR_OVERDUE_THRESHOLDS,
+  CREATOR_PROMPT_COPY,
+  CREATOR_THRESHOLDS,
+  MEMBER_NOTICE_COPY,
+  MEMBER_THRESHOLDS,
+  PERSONAL_DUE_TODAY_COPY,
+  creatorOverdueDayOffset,
+  daysUntil,
+  memberNoticeDayOffset,
+} from '~/lib/billReminder';
 
 export const getSubscriptionEndpoint = (subscription: string) => {
   try {
@@ -499,5 +512,114 @@ export async function checkPaymentReminders() {
   } finally {
     // Re-check every hour
     setTimeout(checkPaymentReminders, 1000 * 60 * 60);
+  }
+}
+
+async function sendBillReminderNotificationOnce(
+  billReminderId: number,
+  userId: number,
+  dayOffset: number,
+  pushData: PushMessage,
+) {
+  try {
+    await db.billReminderNotification.create({ data: { billReminderId, userId, dayOffset } });
+  } catch {
+    // Unique constraint violation = already sent for this cycle, skip.
+    return;
+  }
+  await sendPushNotificationToUsers([userId], pushData);
+}
+
+export async function checkBillReminderNotifications() {
+  try {
+    await refreshOverdueStatuses();
+
+    const reminders = await db.billReminder.findMany({
+      where: { status: { in: [BillReminderStatus.UPCOMING, BillReminderStatus.PAST_DUE] } },
+      include: {
+        group: { select: { id: true, name: true } },
+        members: true,
+        creator: { select: { id: true } },
+      },
+    });
+
+    const now = new Date();
+
+    await Promise.all(
+      reminders.map(async (reminder) => {
+        const daysLeft = daysUntil(reminder.dueDate, now);
+
+        if (reminder.groupId === null || !reminder.group) {
+          // Personal reminder: creator only, on the due date itself.
+          if (daysLeft === 0) {
+            await sendBillReminderNotificationOnce(reminder.id, reminder.createdBy, 0, {
+              title: 'Bill Reminder',
+              message: PERSONAL_DUE_TODAY_COPY(reminder.title),
+              data: { url: '/account' },
+            });
+          }
+          return;
+        }
+
+        const groupName = reminder.group.name;
+        const url = `/groups/${reminder.groupId}`;
+
+        if (CREATOR_THRESHOLDS.includes(daysLeft)) {
+          const copyFn = CREATOR_PROMPT_COPY[daysLeft]!;
+          await sendBillReminderNotificationOnce(reminder.id, reminder.createdBy, daysLeft, {
+            title: 'Bill Reminder',
+            message: copyFn(reminder.title, groupName),
+            data: { url },
+          });
+        }
+
+        if (MEMBER_THRESHOLDS.includes(daysLeft)) {
+          const copyFn = MEMBER_NOTICE_COPY[daysLeft]!;
+          const otherMembers = reminder.members.filter((m) => m.userId !== reminder.createdBy);
+          await Promise.all(
+            otherMembers.map((member) =>
+              sendBillReminderNotificationOnce(
+                reminder.id,
+                member.userId,
+                // Member and creator dedupe keys share the same [billReminderId, userId, dayOffset]
+                // Space; creator/member never overlap for a given userId since a creator's own
+                // Notifications use CREATOR_THRESHOLDS/CREATOR_OVERDUE_THRESHOLDS offsets
+                // Exclusively.
+                memberNoticeDayOffset(daysLeft),
+                {
+                  title: 'Bill Reminder',
+                  message: copyFn(reminder.title, groupName),
+                  data: { url },
+                },
+              ),
+            ),
+          );
+        }
+
+        // Overdue nudge: creator only, only while unresolved (status stays PAST_DUE
+        // Until amount entered or cycle skipped — see refreshOverdueStatuses).
+        if (reminder.status === BillReminderStatus.PAST_DUE) {
+          const daysOverdue = -daysLeft;
+          if (CREATOR_OVERDUE_THRESHOLDS.includes(daysOverdue)) {
+            const copyFn = CREATOR_OVERDUE_COPY[daysOverdue]!;
+            await sendBillReminderNotificationOnce(
+              reminder.id,
+              reminder.createdBy,
+              creatorOverdueDayOffset(daysOverdue),
+              {
+                title: 'Bill Reminder',
+                message: copyFn(reminder.title, groupName),
+                data: { url },
+              },
+            );
+          }
+        }
+      }),
+    );
+  } catch (e) {
+    console.error('Error checking bill reminder notifications', e);
+  } finally {
+    // Re-check daily
+    setTimeout(checkBillReminderNotifications, 1000 * 60 * 60 * 24);
   }
 }

@@ -39,35 +39,38 @@ model Session {
 }
 
 model User {
-  id                   Int                  @id @default(autoincrement())
+  id                   Int                        @id @default(autoincrement())
   name                 String?
-  email                String?              @unique
+  email                String?                    @unique
   emailVerified        DateTime?
   image                String?
-  currency             String               @default("AUD")
+  currency             String                     @default("AUD")
   defaultCurrency      String?
-  preferredLanguage    String               @default("")
+  preferredLanguage    String                     @default("")
   bankingId            String?
   obapiProviderId      String?
   accounts             Account[]
-  friendBalances       BalanceView[]        @relation("FriendBalanceView")
-  userBalances         BalanceView[]        @relation("UserBalanceView")
-  cachedBankData       CachedBankData[]     @relation("UserCachedBankData")
-  addedExpenses        Expense[]            @relation("AddedByUser")
-  deletedExpenses      Expense[]            @relation("DeletedByUser")
-  paidExpenses         Expense[]            @relation("PaidByUser")
-  updatedExpenses      Expense[]            @relation("UpdatedByUser")
+  friendBalances       BalanceView[]              @relation("FriendBalanceView")
+  userBalances         BalanceView[]              @relation("UserBalanceView")
+  cachedBankData       CachedBankData[]           @relation("UserCachedBankData")
+  addedExpenses        Expense[]                  @relation("AddedByUser")
+  deletedExpenses      Expense[]                  @relation("DeletedByUser")
+  paidExpenses         Expense[]                  @relation("PaidByUser")
+  updatedExpenses      Expense[]                  @relation("UpdatedByUser")
   expenseNotes         ExpenseNote[]
   expenseParticipants  ExpenseParticipant[]
   groups               Group[]
   associatedGroups     GroupUser[]
-  friendDefaultSplitsA FriendDefaultSplit[] @relation("FriendDefaultSplitUserA")
-  friendDefaultSplitsB FriendDefaultSplit[] @relation("FriendDefaultSplitUserB")
+  friendDefaultSplitsA FriendDefaultSplit[]       @relation("FriendDefaultSplitUserA")
+  friendDefaultSplitsB FriendDefaultSplit[]       @relation("FriendDefaultSplitUserB")
   sessions             Session[]
-  hiddenFriendIds      Int[]                @default([])
+  hiddenFriendIds      Int[]                      @default([])
   paymentReminders     PaymentReminder[]
-  isAdmin              Boolean              @default(false)
-  accentColor          String               @default("default")
+  isAdmin              Boolean                    @default(false)
+  accentColor          String                     @default("default")
+  billReminders        BillReminder[]
+  billReminderMembers  BillReminderMember[]
+  billReminderNotifs   BillReminderNotification[]
 
   @@schema("public")
 }
@@ -114,6 +117,7 @@ model Group {
   groupUsers        GroupUser[]
   groupBalances     BalanceView[]
   groupDefaultSplit GroupDefaultSplit?
+  billReminders     BillReminder[]
 
   @@schema("public")
 }
@@ -200,6 +204,7 @@ model Expense {
   expenseNotes        ExpenseNote[]
   expenseParticipants ExpenseParticipant[]
   paymentReminders    PaymentReminder[]
+  billReminder        BillReminder?
 
   @@index([groupId])
   @@index([paidBy])
@@ -248,6 +253,61 @@ model ExpenseRecurrence {
   notified Boolean   @default(true)
   expense  Expense[]
   job      job       @relation(fields: [jobId], references: [jobid], onDelete: Cascade)
+
+  @@schema("public")
+}
+
+model BillReminder {
+  id          Int                @id @default(autoincrement())
+  title       String
+  dueDate     DateTime
+  isRecurring Boolean            @default(false)
+  groupId     Int?
+  createdBy   Int
+  status      BillReminderStatus @default(UPCOMING)
+  expenseId   String?            @unique @db.Uuid
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  group   Group?                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator User                       @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  expense Expense?                   @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  members BillReminderMember[]
+  notifs  BillReminderNotification[]
+
+  @@index([groupId])
+  @@index([createdBy])
+  @@index([dueDate])
+  @@schema("public")
+}
+
+model BillReminderMember {
+  billReminderId Int
+  userId         Int
+  billReminder   BillReminder @relation(fields: [billReminderId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([billReminderId, userId])
+  @@schema("public")
+}
+
+model BillReminderNotification {
+  billReminderId Int
+  userId         Int
+  dayOffset      Int
+  sentAt         DateTime     @default(now())
+  billReminder   BillReminder @relation(fields: [billReminderId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([billReminderId, userId, dayOffset])
+  @@schema("public")
+}
+
+enum BillReminderStatus {
+  UPCOMING
+  PAST_DUE
+  NEEDS_NEXT_DATE
+  COMPLETED
 
   @@schema("public")
 }
