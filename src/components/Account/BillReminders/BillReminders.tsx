@@ -1,21 +1,11 @@
 import { BillReminderStatus, RecurrenceInterval } from '@prisma/client';
-import { Bell, Repeat } from 'lucide-react';
+import { ChevronLeftIcon, Repeat } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from '~/components/AddExpense/DateSelector';
-import { AccountButton } from '~/components/Account/AccountButton';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
 import { CurrencyInput } from '~/components/ui/currency-input';
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from '~/components/ui/drawer';
 import { Input } from '~/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '~/components/ui/native-select';
 import { useTranslationWithUtils } from '~/hooks/useTranslationWithUtils';
@@ -56,37 +46,52 @@ const RECURRENCE_LABEL: Record<RecurrenceInterval, string> = {
 // Disable pinch-zoom accessibility app-wide. Scoped to this feature's inputs
 // Since no site-wide convention exists yet to extend instead (see ui/input.tsx,
 // Ui/native-select.tsx — both still default to text-sm).
-const MOBILE_SAFE_TEXT = 'text-base sm:text-sm';
+export const MOBILE_SAFE_TEXT = 'text-base sm:text-sm';
 // Prevents accidental double-tap-to-zoom on interactive elements without
 // Touching the global viewport zoom/pinch behavior.
-const TOUCH_TARGET = 'touch-manipulation min-h-11';
+export const TOUCH_TARGET = 'touch-manipulation min-h-11';
 
-export const BillReminders: React.FC = () => {
-  const [open, setOpen] = useState(false);
+type PageView = { kind: 'list' } | { kind: 'create' } | { kind: 'detail'; reminderId: number };
+
+/**
+ * Full-page Bill Reminders UI (src/pages/account/bill-reminders.tsx). Previously
+ * a vaul Drawer (bottom sheet) off the Account tab — moved off Drawer entirely,
+ * not just visually: the broken date picker was caused by DateSelector's Radix
+ * Popover being nested inside a vaul Drawer, where the two portal/overlay
+ * libraries fought over the same iOS touch event, so taps on a calendar day
+ * landed on the Drawer's overlay instead of the day button and onSelect never
+ * fired. Un-nesting removes the mechanism, not just the symptom. List/create/
+ * detail are now page-level states (no modal anywhere) so the same class of
+ * bug can't recur here.
+ */
+export const BillRemindersContent: React.FC = () => {
+  const [view, setView] = useState<PageView>({ kind: 'list' });
+
+  if (view.kind === 'create') {
+    return <CreateBillReminderView onDone={() => setView({ kind: 'list' })} />;
+  }
+
+  if (view.kind === 'detail') {
+    return (
+      <BillReminderDetailView
+        reminderId={view.reminderId}
+        onBack={() => setView({ kind: 'list' })}
+      />
+    );
+  }
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        <AccountButton>
-          <Bell className="size-5 text-purple-500" />
-          Bill Reminders
-        </AccountButton>
-      </DrawerTrigger>
-      {/* Pb-[calc(...)] keeps content clear of the home indicator / notch in
-          standalone PWA mode on iOS (matchMedia('(display-mode: standalone)')). */}
-      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
-        <DrawerHeader>
-          <DrawerTitle>Bill Reminders</DrawerTitle>
-        </DrawerHeader>
-        <div className="overflow-y-auto px-4 pb-6">
-          <BillReminderList />
-        </div>
-      </DrawerContent>
-    </Drawer>
+    <BillReminderListView
+      onCreate={() => setView({ kind: 'create' })}
+      onOpenDetail={(reminderId) => setView({ kind: 'detail', reminderId })}
+    />
   );
 };
 
-const BillReminderList: React.FC = () => {
+const BillReminderListView: React.FC<{
+  onCreate: () => void;
+  onOpenDetail: (reminderId: number) => void;
+}> = ({ onCreate, onOpenDetail }) => {
   const listQuery = api.billReminder.list.useQuery();
   const { toUIDate } = useTranslationWithUtils();
 
@@ -97,12 +102,19 @@ const BillReminderList: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-3">
-      <CreateBillReminderDrawer />
+      <Button variant="outline" className={TOUCH_TARGET} onClick={onCreate}>
+        New Reminder
+      </Button>
 
       {listQuery.isPending && <div className="text-muted-foreground text-sm">Loading…</div>}
 
       {reminders.map((reminder) => (
-        <BillReminderRow key={reminder.id} reminder={reminder} toUIDate={toUIDate} />
+        <BillReminderRow
+          key={reminder.id}
+          reminder={reminder}
+          toUIDate={toUIDate}
+          onOpenDetail={() => onOpenDetail(reminder.id)}
+        />
       ))}
 
       {!listQuery.isPending && reminders.length === 0 && (
@@ -115,9 +127,9 @@ const BillReminderList: React.FC = () => {
 const BillReminderRow: React.FC<{
   reminder: ReminderListItem;
   toUIDate: ReturnType<typeof useTranslationWithUtils>['toUIDate'];
-}> = ({ reminder, toUIDate }) => {
+  onOpenDetail: () => void;
+}> = ({ reminder, toUIDate, onOpenDetail }) => {
   const utils = api.useUtils();
-  const [detailOpen, setDetailOpen] = useState(false);
   const deleteMutation = api.billReminder.delete.useMutation({
     onSuccess: () => {
       utils.billReminder.list.invalidate().catch(console.error);
@@ -141,7 +153,7 @@ const BillReminderRow: React.FC<{
     <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
       <button
         className={`flex flex-col items-start text-left ${TOUCH_TARGET}`}
-        onClick={() => setDetailOpen(true)}
+        onClick={onOpenDetail}
       >
         <div className="flex items-center gap-2 font-medium">
           {reminder.title}
@@ -155,17 +167,12 @@ const BillReminderRow: React.FC<{
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         {reminder.status === BillReminderStatus.NEEDS_NEXT_DATE && (
-          <NextDueDateButton reminderId={reminder.id} />
+          <NextDueDateField reminderId={reminder.id} />
         )}
 
         {isPastDueRecurring && (
           <>
-            <Button
-              size="sm"
-              variant="outline"
-              className={TOUCH_TARGET}
-              onClick={() => setDetailOpen(true)}
-            >
+            <Button size="sm" variant="outline" className={TOUCH_TARGET} onClick={onOpenDetail}>
               Enter amount
             </Button>
             <Button
@@ -191,32 +198,26 @@ const BillReminderRow: React.FC<{
           </Button>
         )}
       </div>
-
-      <BillReminderDetailDrawer
-        reminder={reminder}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-      />
     </div>
   );
 };
 
-const NextDueDateButton: React.FC<{ reminderId: number }> = ({ reminderId }) => {
+const NextDueDateField: React.FC<{ reminderId: number }> = ({ reminderId }) => {
   const utils = api.useUtils();
   const [date, setDate] = useState<Date | undefined>(undefined);
-  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const mutation = api.billReminder.setNextDueDate.useMutation({
     onSuccess: () => {
       utils.billReminder.list.invalidate().catch(console.error);
-      setOpen(false);
+      setEditing(false);
       toast.success('Next due date set');
     },
     onError: (e) => toast.error(e.message),
   });
 
-  if (!open) {
+  if (!editing) {
     return (
-      <Button size="sm" variant="outline" className={TOUCH_TARGET} onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className={TOUCH_TARGET} onClick={() => setEditing(true)}>
         Update due date
       </Button>
     );
@@ -237,9 +238,8 @@ const NextDueDateButton: React.FC<{ reminderId: number }> = ({ reminderId }) => 
   );
 };
 
-const CreateBillReminderDrawer: React.FC = () => {
+const CreateBillReminderView: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const utils = api.useUtils();
-  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval | null>(null);
@@ -247,23 +247,17 @@ const CreateBillReminderDrawer: React.FC = () => {
   const [groupId, setGroupId] = useState<number | null>(null);
   const [memberIds, setMemberIds] = useState<number[]>([]);
 
-  const groupsQuery = api.group.getAllGroups.useQuery(undefined, { enabled: open });
+  const groupsQuery = api.group.getAllGroups.useQuery();
   const groupDetailsQuery = api.group.getGroupDetails.useQuery(
     { groupId: groupId! },
-    { enabled: open && groupId !== null },
+    { enabled: groupId !== null },
   );
 
   const createMutation = api.billReminder.create.useMutation({
     onSuccess: () => {
       utils.billReminder.list.invalidate().catch(console.error);
       toast.success('Reminder created');
-      setOpen(false);
-      setTitle('');
-      setDueDate(undefined);
-      setRecurrenceInterval(null);
-      setCustomIntervalDays('');
-      setGroupId(null);
-      setMemberIds([]);
+      onDone();
     },
     onError: (e) => toast.error(e.message),
   });
@@ -288,188 +282,176 @@ const CreateBillReminderDrawer: React.FC = () => {
     customDaysValid;
 
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        <Button variant="outline" className={TOUCH_TARGET}>
-          New Reminder
-        </Button>
-      </DrawerTrigger>
-      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
-        <DrawerHeader>
-          <DrawerTitle>New Bill Reminder</DrawerTitle>
-        </DrawerHeader>
-        <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4">
+    <div className="flex flex-col gap-4 pb-[calc(env(safe-area-inset-bottom)_+_1rem)]">
+      <button
+        className={`text-muted-foreground flex items-center gap-1 text-sm ${TOUCH_TARGET}`}
+        onClick={onDone}
+      >
+        <ChevronLeftIcon className="h-5 w-5" />
+        Back to reminders
+      </button>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium">Title</label>
+        <Input
+          className={MOBILE_SAFE_TEXT}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Electricity bill"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium">Due date</label>
+        <DateSelector mode="single" required selected={dueDate} onSelect={setDueDate} />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Personal or group?</span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={groupId === null ? 'default' : 'outline'}
+            className={TOUCH_TARGET}
+            onClick={() => {
+              setGroupId(null);
+              setMemberIds([]);
+            }}
+          >
+            Personal
+          </Button>
+          <Button
+            size="sm"
+            variant={groupId !== null ? 'default' : 'outline'}
+            className={TOUCH_TARGET}
+            onClick={() => setGroupId(groupsQuery.data?.[0]?.group.id ?? null)}
+            disabled={!groupsQuery.data?.length}
+          >
+            Group
+          </Button>
+        </div>
+      </div>
+
+      {groupId !== null && (
+        <>
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Title</label>
-            <Input
-              className={MOBILE_SAFE_TEXT}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Electricity bill"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Due date</label>
-            <DateSelector mode="single" required selected={dueDate} onSelect={setDueDate} />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Personal or group?</span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={groupId === null ? 'default' : 'outline'}
-                className={TOUCH_TARGET}
-                onClick={() => {
-                  setGroupId(null);
-                  setMemberIds([]);
-                }}
-              >
-                Personal
-              </Button>
-              <Button
-                size="sm"
-                variant={groupId !== null ? 'default' : 'outline'}
-                className={TOUCH_TARGET}
-                onClick={() => setGroupId(groupsQuery.data?.[0]?.group.id ?? null)}
-                disabled={!groupsQuery.data?.length}
-              >
-                Group
-              </Button>
-            </div>
-          </div>
-
-          {groupId !== null && (
-            <>
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium">Group</label>
-                <NativeSelect
-                  className={MOBILE_SAFE_TEXT}
-                  value={groupId}
-                  onChange={(e) => {
-                    setGroupId(Number(e.target.value));
-                    setMemberIds([]);
-                  }}
-                >
-                  {groupsQuery.data?.map((gu) => (
-                    <NativeSelectOption key={gu.group.id} value={gu.group.id}>
-                      {gu.group.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium">Split between</label>
-                {groupMembers.map((gu) => (
-                  <label key={gu.userId} className={`flex items-center gap-2 ${TOUCH_TARGET}`}>
-                    <Checkbox
-                      className="size-5"
-                      checked={memberIds.includes(gu.userId)}
-                      onCheckedChange={() => toggleMember(gu.userId)}
-                    />
-                    {gu.user.name ?? gu.user.email}
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Recurrence</label>
+            <label className="text-sm font-medium">Group</label>
             <NativeSelect
               className={MOBILE_SAFE_TEXT}
-              value={recurrenceInterval ?? ''}
+              value={groupId}
               onChange={(e) => {
-                const value = e.target.value;
-                const isValidInterval = (Object.values(RecurrenceInterval) as string[]).includes(
-                  value,
-                );
-                setRecurrenceInterval(isValidInterval ? (value as RecurrenceInterval) : null);
-                if (value !== RecurrenceInterval.CUSTOM) {
-                  setCustomIntervalDays('');
-                }
+                setGroupId(Number(e.target.value));
+                setMemberIds([]);
               }}
             >
-              <NativeSelectOption value="">Not recurring</NativeSelectOption>
-              <NativeSelectOption value={RecurrenceInterval.MONTHLY}>Monthly</NativeSelectOption>
-              <NativeSelectOption value={RecurrenceInterval.QUARTERLY}>
-                Quarterly
-              </NativeSelectOption>
-              <NativeSelectOption value={RecurrenceInterval.HALF_YEARLY}>
-                Half-yearly
-              </NativeSelectOption>
-              <NativeSelectOption value={RecurrenceInterval.YEARLY}>Yearly</NativeSelectOption>
-              <NativeSelectOption value={RecurrenceInterval.CUSTOM}>Custom</NativeSelectOption>
+              {groupsQuery.data?.map((gu) => (
+                <NativeSelectOption key={gu.group.id} value={gu.group.id}>
+                  {gu.group.name}
+                </NativeSelectOption>
+              ))}
             </NativeSelect>
           </div>
 
-          {recurrenceInterval === RecurrenceInterval.CUSTOM && (
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium">Repeat every how many days?</label>
-              <Input
-                className={MOBILE_SAFE_TEXT}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                step={1}
-                value={customIntervalDays}
-                onChange={(e) => setCustomIntervalDays(e.target.value)}
-                placeholder="e.g. 60"
-              />
-            </div>
-          )}
-        </div>
-        <DrawerFooter>
-          <Button
-            className={TOUCH_TARGET}
-            disabled={!canSubmit || createMutation.isPending}
-            onClick={() =>
-              dueDate &&
-              createMutation.mutate({
-                title: title.trim(),
-                dueDate,
-                recurrenceInterval,
-                customIntervalDays:
-                  recurrenceInterval === RecurrenceInterval.CUSTOM ? customDaysNum : null,
-                groupId,
-                memberIds,
-              })
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Split between</label>
+            {groupMembers.map((gu) => (
+              <label key={gu.userId} className={`flex items-center gap-2 ${TOUCH_TARGET}`}>
+                <Checkbox
+                  className="size-5"
+                  checked={memberIds.includes(gu.userId)}
+                  onCheckedChange={() => toggleMember(gu.userId)}
+                />
+                {gu.user.name ?? gu.user.email}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium">Recurrence</label>
+        <NativeSelect
+          className={MOBILE_SAFE_TEXT}
+          value={recurrenceInterval ?? ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            const isValidInterval = (Object.values(RecurrenceInterval) as string[]).includes(value);
+            setRecurrenceInterval(isValidInterval ? (value as RecurrenceInterval) : null);
+            if (value !== RecurrenceInterval.CUSTOM) {
+              setCustomIntervalDays('');
             }
-          >
-            Create
-          </Button>
-          <DrawerClose asChild>
-            <Button variant="ghost" className={TOUCH_TARGET}>
-              Cancel
-            </Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+          }}
+        >
+          <NativeSelectOption value="">Not recurring</NativeSelectOption>
+          <NativeSelectOption value={RecurrenceInterval.MONTHLY}>Monthly</NativeSelectOption>
+          <NativeSelectOption value={RecurrenceInterval.QUARTERLY}>Quarterly</NativeSelectOption>
+          <NativeSelectOption value={RecurrenceInterval.HALF_YEARLY}>
+            Half-yearly
+          </NativeSelectOption>
+          <NativeSelectOption value={RecurrenceInterval.YEARLY}>Yearly</NativeSelectOption>
+          <NativeSelectOption value={RecurrenceInterval.CUSTOM}>Custom</NativeSelectOption>
+        </NativeSelect>
+      </div>
+
+      {recurrenceInterval === RecurrenceInterval.CUSTOM && (
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium">Repeat every how many days?</label>
+          <Input
+            className={MOBILE_SAFE_TEXT}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            value={customIntervalDays}
+            onChange={(e) => setCustomIntervalDays(e.target.value)}
+            placeholder="e.g. 60"
+          />
+        </div>
+      )}
+
+      <Button
+        className={`mt-2 ${TOUCH_TARGET}`}
+        disabled={!canSubmit || createMutation.isPending}
+        onClick={() =>
+          dueDate &&
+          createMutation.mutate({
+            title: title.trim(),
+            dueDate,
+            recurrenceInterval,
+            customIntervalDays:
+              recurrenceInterval === RecurrenceInterval.CUSTOM ? customDaysNum : null,
+            groupId,
+            memberIds,
+          })
+        }
+      >
+        Create
+      </Button>
+    </div>
   );
 };
 
-const BillReminderDetailDrawer: React.FC<{
-  reminder: ReminderListItem;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}> = ({ reminder, open, onOpenChange }) => {
+const BillReminderDetailView: React.FC<{ reminderId: number; onBack: () => void }> = ({
+  reminderId,
+  onBack,
+}) => {
   const utils = api.useUtils();
-  const [memberIds, setMemberIds] = useState<number[]>(reminder.members.map((m) => m.userId));
+  const reminderQuery = api.billReminder.get.useQuery({ id: reminderId });
+  const reminder = reminderQuery.data as unknown as ReminderListItem | undefined;
+
+  const [memberIds, setMemberIds] = useState<number[] | null>(null);
   const [amount, setAmount] = useState<bigint>(0n);
   const [amountStr, setAmountStr] = useState('');
   // Bill reminders don't store an amount/currency (spec: amount only exists at entry time).
-  // No reliable currency resolution exists at expense-creation time anywhere else in the app
-  // Either — Group.defaultCurrency is never read into the add-expense flow, and the client
+  // No reliable currency resolution exists at expense-creation time anywhere else in the app.
+  // Group.defaultCurrency is never read into the add-expense flow, and the client
   // Store (src/store/addStore.ts) hardcodes 'AUD' the same way. Matching that convention here.
   // Fixed default, not derived — revisit if reminders ever get multi-currency support.
   const currency = 'AUD';
 
   const groupDetailsQuery = api.group.getGroupDetails.useQuery(
-    { groupId: reminder.groupId! },
-    { enabled: open && reminder.groupId !== null },
+    { groupId: reminder?.groupId ?? -1 },
+    { enabled: reminder?.groupId !== null && reminder?.groupId !== undefined },
   );
 
   const updateMembersMutation = api.billReminder.updateMembers.useMutation({
@@ -484,39 +466,51 @@ const BillReminderDetailDrawer: React.FC<{
     onSuccess: () => {
       utils.billReminder.list.invalidate().catch(console.error);
       toast.success('Expense created');
-      onOpenChange(false);
+      onBack();
     },
     onError: (e) => toast.error(e.message),
   });
 
   const groupMembers = groupDetailsQuery.data?.groupUsers ?? [];
+  const selectedMemberIds = memberIds ?? reminder?.members.map((m) => m.userId) ?? [];
 
   const toggleMember = (userId: number) => {
-    setMemberIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
-    );
+    const base = memberIds ?? reminder?.members.map((m) => m.userId) ?? [];
+    setMemberIds(base.includes(userId) ? base.filter((id) => id !== userId) : [...base, userId]);
   };
 
   const showAmountEntry =
+    !!reminder &&
     reminder.groupId !== null &&
     (reminder.status === BillReminderStatus.UPCOMING ||
       reminder.status === BillReminderStatus.PAST_DUE);
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
-        <DrawerHeader>
-          <DrawerTitle>{reminder.title}</DrawerTitle>
-          {reminder.recurrenceInterval && (
-            <p className="text-muted-foreground text-xs">
-              Recurs {RECURRENCE_LABEL[reminder.recurrenceInterval].toLowerCase()}
-              {reminder.recurrenceInterval === RecurrenceInterval.CUSTOM &&
-                reminder.customIntervalDays &&
-                ` (every ${reminder.customIntervalDays} days)`}
-            </p>
-          )}
-        </DrawerHeader>
-        <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-6">
+    <div className="flex flex-col gap-4 pb-[calc(env(safe-area-inset-bottom)_+_1rem)]">
+      <button
+        className={`text-muted-foreground flex items-center gap-1 text-sm ${TOUCH_TARGET}`}
+        onClick={onBack}
+      >
+        <ChevronLeftIcon className="h-5 w-5" />
+        Back to reminders
+      </button>
+
+      {reminderQuery.isPending && <div className="text-muted-foreground text-sm">Loading…</div>}
+
+      {reminder && (
+        <>
+          <div>
+            <div className="text-lg font-medium">{reminder.title}</div>
+            {reminder.recurrenceInterval && (
+              <p className="text-muted-foreground text-xs">
+                Recurs {RECURRENCE_LABEL[reminder.recurrenceInterval].toLowerCase()}
+                {reminder.recurrenceInterval === RecurrenceInterval.CUSTOM &&
+                  reminder.customIntervalDays &&
+                  ` (every ${reminder.customIntervalDays} days)`}
+              </p>
+            )}
+          </div>
+
           {reminder.groupId !== null && (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">Split between</label>
@@ -524,7 +518,7 @@ const BillReminderDetailDrawer: React.FC<{
                 <label key={gu.userId} className={`flex items-center gap-2 ${TOUCH_TARGET}`}>
                   <Checkbox
                     className="size-5"
-                    checked={memberIds.includes(gu.userId)}
+                    checked={selectedMemberIds.includes(gu.userId)}
                     onCheckedChange={() => toggleMember(gu.userId)}
                   />
                   {gu.user.name ?? gu.user.email}
@@ -534,8 +528,10 @@ const BillReminderDetailDrawer: React.FC<{
                 size="sm"
                 variant="outline"
                 className={`mt-1 w-fit ${TOUCH_TARGET}`}
-                disabled={memberIds.length === 0}
-                onClick={() => updateMembersMutation.mutate({ id: reminder.id, memberIds })}
+                disabled={selectedMemberIds.length === 0}
+                onClick={() =>
+                  updateMembersMutation.mutate({ id: reminder.id, memberIds: selectedMemberIds })
+                }
               >
                 Save member selection
               </Button>
@@ -573,8 +569,8 @@ const BillReminderDetailDrawer: React.FC<{
               </Button>
             </div>
           )}
-        </div>
-      </DrawerContent>
-    </Drawer>
+        </>
+      )}
+    </div>
   );
 };

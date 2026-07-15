@@ -98,11 +98,19 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               children
             )}
           </div>
-          <div className="h-28 lg:h-0" />
+          {/* Reserves scroll room below content for the fixed nav below, whose
+              height grows on notched iOS devices once the home-indicator inset
+              is added below — kept additive with the same env() so this stays
+              in sync with the nav's own padding rather than drifting apart. */}
+          <div className="h-[calc(7rem_+_env(safe-area-inset-bottom))] lg:h-0" />
         </div>
       </div>
 
-      <nav className="bg-opacity-80 fixed bottom-0 flex w-full justify-between border-t px-2 pb-4 shadow-xs backdrop-blur-lg lg:hidden">
+      {/* Pb-4 is the base spacing, unchanged on non-notched devices (where
+          env(safe-area-inset-bottom) resolves to 0). env(...) is added on top,
+          not substituted, so notched iPhones get extra clearance above the
+          home-indicator without regressing spacing anywhere else. */}
+      <nav className="bg-opacity-80 fixed bottom-0 flex w-full justify-between border-t px-2 pb-[calc(1rem_+_env(safe-area-inset-bottom))] shadow-xs backdrop-blur-lg lg:hidden">
         <NavItem
           title={t?.('navigation.balances') ?? 'Balances'}
           Icon={SolidScaleIcon}

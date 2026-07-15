@@ -44,6 +44,10 @@ const MyApp: AppType<{ session: Session | null }> = ({
     <main className={clsx(poppins.className, 'h-full')}>
       <Head>
         <title>{t('meta.title')}</title>
+        {/* Viewport-fit=cover is required for env(safe-area-inset-*) to resolve to
+            anything but 0 on iOS — without it, safe-area padding anywhere in the
+            app is silently inert. No other page/layout was setting this. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="icon" href="/favicon.ico" />
         <meta name="application-name" content={t('meta.application_name')} />
         <meta name="apple-mobile-web-app-capable" content="yes" />

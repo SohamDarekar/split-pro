@@ -1,4 +1,4 @@
-import { BadgeInfo, CreditCard, Download, FileDown, ShieldCheck } from 'lucide-react';
+import { BadgeInfo, Bell, CreditCard, Download, FileDown, ShieldCheck } from 'lucide-react';
 import type { GetServerSideProps } from 'next';
 import { signOut, useSession } from 'next-auth/react';
 import { useTranslation } from 'next-i18next';
@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AccentColorPicker } from '~/components/Account/AccentColorPicker';
 import { AccountButton } from '~/components/Account/AccountButton';
-import { BillReminders } from '~/components/Account/BillReminders/BillReminders';
 import { DownloadAppDrawer } from '~/components/Account/DownloadAppDrawer';
 import { SubmitFeedback } from '~/components/Account/SubmitFeedback';
 import { SubscribeNotification } from '~/components/Account/SubscribeNotification';
@@ -134,7 +133,10 @@ const AccountPage: NextPageWithUser<{
 
           <SubscribeNotification />
 
-          <BillReminders />
+          <AccountButton href="/account/bill-reminders">
+            <Bell className="size-5 text-purple-500" />
+            Bill Reminders
+          </AccountButton>
 
           <AccentColorPicker accentColor={accentColor} onAccentColorChange={setAccentColor} />
 
