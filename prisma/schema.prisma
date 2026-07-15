@@ -258,16 +258,17 @@ model ExpenseRecurrence {
 }
 
 model BillReminder {
-  id          Int                @id @default(autoincrement())
-  title       String
-  dueDate     DateTime
-  isRecurring Boolean            @default(false)
-  groupId     Int?
-  createdBy   Int
-  status      BillReminderStatus @default(UPCOMING)
-  expenseId   String?            @unique @db.Uuid
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                 Int                 @id @default(autoincrement())
+  title              String
+  dueDate            DateTime
+  recurrenceInterval RecurrenceInterval?
+  customIntervalDays Int?
+  groupId            Int?
+  createdBy          Int
+  status             BillReminderStatus  @default(UPCOMING)
+  expenseId          String?             @unique @db.Uuid
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   group   Group?                     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   creator User                       @relation(fields: [createdBy], references: [id], onDelete: Cascade)
@@ -308,6 +309,16 @@ enum BillReminderStatus {
   PAST_DUE
   NEEDS_NEXT_DATE
   COMPLETED
+
+  @@schema("public")
+}
+
+enum RecurrenceInterval {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  CUSTOM
 
   @@schema("public")
 }

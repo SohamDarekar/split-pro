@@ -1,4 +1,4 @@
-import { BillReminderStatus } from '@prisma/client';
+import { BillReminderStatus, RecurrenceInterval } from '@prisma/client';
 
 interface MockDb {
   billReminder: {
@@ -40,23 +40,21 @@ import { db } from '~/server/db';
 
 const mockDb = db as unknown as MockDb;
 
-mockDb.$transaction.mockImplementation(async (arg: unknown) =>
-  typeof arg === 'function'
-    ? (arg as (tx: MockDb) => unknown)(mockDb)
-    : Promise.all(arg as unknown[]),
-);
-
-beforeEach(() => {
-  jest.clearAllMocks();
+const setupTransaction = () => {
   mockDb.$transaction.mockImplementation(async (arg: unknown) =>
     typeof arg === 'function'
       ? (arg as (tx: MockDb) => unknown)(mockDb)
       : Promise.all(arg as unknown[]),
   );
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  setupTransaction();
 });
 
 describe('refreshOverdueStatuses', () => {
-  it('moves overdue reminders to PAST_DUE regardless of isRecurring (no auto NEEDS_NEXT_DATE)', async () => {
+  it('moves overdue reminders to PAST_DUE regardless of recurrence (no auto NEEDS_NEXT_DATE)', async () => {
     await refreshOverdueStatuses(new Date('2026-07-15T00:00:00Z'));
 
     expect(mockDb.billReminder.updateMany).toHaveBeenCalledWith({
@@ -73,25 +71,28 @@ describe('skipBillReminderCycle', () => {
   const baseReminder = {
     id: 1,
     createdBy: 42,
-    isRecurring: true,
+    recurrenceInterval: RecurrenceInterval.MONTHLY,
+    customIntervalDays: null,
     status: BillReminderStatus.PAST_DUE,
     groupId: 7,
+    dueDate: new Date('2026-07-01T00:00:00Z'),
     expenseId: null,
   };
 
-  it('moves a PAST_DUE recurring reminder to NEEDS_NEXT_DATE without creating an expense', async () => {
+  it('auto-advances a PAST_DUE recurring reminder to the next computed due date and UPCOMING, without creating an expense', async () => {
     mockDb.billReminder.findUnique.mockResolvedValueOnce(baseReminder);
-    mockDb.billReminder.update.mockResolvedValueOnce({
-      ...baseReminder,
-      status: BillReminderStatus.NEEDS_NEXT_DATE,
-    });
+    mockDb.billReminder.update.mockResolvedValueOnce({ ...baseReminder });
 
     await skipBillReminderCycle(1, 42);
 
     expect(createExpense).not.toHaveBeenCalled();
     expect(mockDb.billReminder.update).toHaveBeenCalledWith({
       where: { id: 1 },
-      data: { expenseId: null, status: BillReminderStatus.NEEDS_NEXT_DATE },
+      data: {
+        expenseId: null,
+        dueDate: new Date('2026-08-01T00:00:00Z'),
+        status: BillReminderStatus.UPCOMING,
+      },
     });
     // Member/group config untouched: skip never touches billReminderMember or group fields.
     expect(mockDb.billReminder.update).not.toHaveBeenCalledWith(
@@ -110,13 +111,37 @@ describe('skipBillReminderCycle', () => {
     });
   });
 
+  it('uses the CUSTOM interval day-offset when advancing', async () => {
+    mockDb.billReminder.findUnique.mockResolvedValueOnce({
+      ...baseReminder,
+      recurrenceInterval: RecurrenceInterval.CUSTOM,
+      customIntervalDays: 45,
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+    });
+    mockDb.billReminder.update.mockResolvedValueOnce(baseReminder);
+
+    await skipBillReminderCycle(1, 42);
+
+    expect(mockDb.billReminder.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: {
+        expenseId: null,
+        dueDate: new Date('2026-08-15T00:00:00Z'),
+        status: BillReminderStatus.UPCOMING,
+      },
+    });
+  });
+
   it('rejects when the requestor is not the creator', async () => {
     mockDb.billReminder.findUnique.mockResolvedValueOnce(baseReminder);
     await expect(skipBillReminderCycle(1, 999)).rejects.toThrow('Only the creator');
   });
 
   it('rejects for non-recurring reminders', async () => {
-    mockDb.billReminder.findUnique.mockResolvedValueOnce({ ...baseReminder, isRecurring: false });
+    mockDb.billReminder.findUnique.mockResolvedValueOnce({
+      ...baseReminder,
+      recurrenceInterval: null,
+    });
     await expect(skipBillReminderCycle(1, 42)).rejects.toThrow('Only recurring reminders');
   });
 
@@ -146,12 +171,44 @@ describe('deleteBillReminder (destructive Dismiss)', () => {
 });
 
 describe('submitBillReminderAmount', () => {
-  it('resolves a recurring reminder into NEEDS_NEXT_DATE after creating the expense', async () => {
+  it('auto-advances a recurring reminder to its next computed due date and UPCOMING after creating the expense, clearing expenseId for the new cycle', async () => {
     mockDb.billReminder.findUnique.mockResolvedValueOnce({
       id: 1,
       createdBy: 42,
       groupId: 7,
-      isRecurring: true,
+      recurrenceInterval: RecurrenceInterval.MONTHLY,
+      customIntervalDays: null,
+      dueDate: new Date('2026-07-15T00:00:00Z'),
+      expenseId: null,
+      members: [{ userId: 42 }, { userId: 43 }],
+    });
+    (createExpense as jest.Mock).mockResolvedValueOnce({ id: 'expense-uuid' });
+
+    const expense = await submitBillReminderAmount(1, 42, 100n, 'AUD', 'general');
+
+    expect(createExpense).toHaveBeenCalled();
+    expect(expense).toEqual({ id: 'expense-uuid' });
+    expect(mockDb.billReminderNotification.deleteMany).toHaveBeenCalledWith({
+      where: { billReminderId: 1 },
+    });
+    expect(mockDb.billReminder.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: {
+        expenseId: null,
+        dueDate: new Date('2026-08-15T00:00:00Z'),
+        status: BillReminderStatus.UPCOMING,
+      },
+    });
+  });
+
+  it('marks a non-recurring reminder COMPLETED and keeps the expense link', async () => {
+    mockDb.billReminder.findUnique.mockResolvedValueOnce({
+      id: 1,
+      createdBy: 42,
+      groupId: 7,
+      recurrenceInterval: null,
+      customIntervalDays: null,
+      dueDate: new Date('2026-07-15T00:00:00Z'),
       expenseId: null,
       members: [{ userId: 42 }, { userId: 43 }],
     });
@@ -159,10 +216,9 @@ describe('submitBillReminderAmount', () => {
 
     await submitBillReminderAmount(1, 42, 100n, 'AUD', 'general');
 
-    expect(createExpense).toHaveBeenCalled();
     expect(mockDb.billReminder.update).toHaveBeenCalledWith({
       where: { id: 1 },
-      data: { expenseId: 'expense-uuid', status: BillReminderStatus.NEEDS_NEXT_DATE },
+      data: { expenseId: 'expense-uuid', status: BillReminderStatus.COMPLETED },
     });
   });
 });

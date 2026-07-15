@@ -1,19 +1,32 @@
-import { BillReminderStatus, SplitType } from '@prisma/client';
+import { BillReminderStatus, RecurrenceInterval, SplitType } from '@prisma/client';
 import { db } from '~/server/db';
 import { createExpense } from './splitService';
-import { computeEqualSplitParticipants, computeReminderStatus } from '~/lib/billReminder';
+import {
+  computeEqualSplitParticipants,
+  computeNextDueDate,
+  computeReminderStatus,
+} from '~/lib/billReminder';
 
-export { computeEqualSplitParticipants, computeReminderStatus };
+export { computeEqualSplitParticipants, computeNextDueDate, computeReminderStatus };
 
 export async function createBillReminder(input: {
   title: string;
   dueDate: Date;
-  isRecurring: boolean;
+  recurrenceInterval: RecurrenceInterval | null;
+  customIntervalDays: number | null;
   groupId: number | null;
   memberIds: number[];
   createdBy: number;
 }) {
-  const { title, dueDate, isRecurring, groupId, memberIds, createdBy } = input;
+  const { title, dueDate, recurrenceInterval, customIntervalDays, groupId, memberIds, createdBy } =
+    input;
+
+  if (recurrenceInterval === RecurrenceInterval.CUSTOM && !customIntervalDays) {
+    throw new Error('customIntervalDays is required when recurrence is Custom');
+  }
+  if (recurrenceInterval !== RecurrenceInterval.CUSTOM && customIntervalDays) {
+    throw new Error('customIntervalDays only applies to Custom recurrence');
+  }
 
   if (groupId !== null) {
     const membership = await db.groupUser.findUnique({
@@ -36,7 +49,9 @@ export async function createBillReminder(input: {
     data: {
       title,
       dueDate,
-      isRecurring,
+      recurrenceInterval,
+      customIntervalDays:
+        recurrenceInterval === RecurrenceInterval.CUSTOM ? customIntervalDays : null,
       groupId,
       createdBy,
       status: computeReminderStatus(dueDate, BillReminderStatus.UPCOMING),
@@ -83,6 +98,12 @@ export async function updateBillReminderMembers(
   });
 }
 
+/**
+ * Manual override, kept as a fallback escape hatch (the automatic cycle-resolution
+ * paths below no longer need it since MONTHLY/QUARTERLY/HALF_YEARLY/YEARLY overflow
+ * is resolved by clamping — see computeNextDueDate). Still useful if a creator wants
+ * to override the computed date by hand.
+ */
 export async function setNextDueDate(billReminderId: number, requestorId: number, dueDate: Date) {
   const reminder = await db.billReminder.findUnique({ where: { id: billReminderId } });
   if (!reminder) {
@@ -91,7 +112,7 @@ export async function setNextDueDate(billReminderId: number, requestorId: number
   if (reminder.createdBy !== requestorId) {
     throw new Error('Only the creator can update this reminder');
   }
-  if (!reminder.isRecurring) {
+  if (reminder.recurrenceInterval === null) {
     throw new Error('Only recurring reminders support setting a next due date');
   }
 
@@ -108,6 +129,13 @@ export async function setNextDueDate(billReminderId: number, requestorId: number
   });
 }
 
+/**
+ * Skips an overdue, unresolved cycle without creating an expense. Auto-advances
+ * straight to the next computed due date and back to UPCOMING (mirrors
+ * submitBillReminderAmount's resolution) rather than parking at NEEDS_NEXT_DATE —
+ * per product decision, the manual date field is now only a fallback, not the
+ * normal path. Group/member config is untouched.
+ */
 export async function skipBillReminderCycle(billReminderId: number, requestorId: number) {
   const reminder = await db.billReminder.findUnique({ where: { id: billReminderId } });
   if (!reminder) {
@@ -116,12 +144,18 @@ export async function skipBillReminderCycle(billReminderId: number, requestorId:
   if (reminder.createdBy !== requestorId) {
     throw new Error('Only the creator can skip this cycle');
   }
-  if (!reminder.isRecurring) {
+  if (reminder.recurrenceInterval === null) {
     throw new Error('Only recurring reminders support skipping a cycle');
   }
   if (reminder.status !== BillReminderStatus.PAST_DUE) {
     throw new Error('Only an overdue, unresolved cycle can be skipped');
   }
+
+  const nextDueDate = computeNextDueDate(
+    reminder.dueDate,
+    reminder.recurrenceInterval,
+    reminder.customIntervalDays,
+  );
 
   return db.$transaction(async (tx) => {
     await tx.billReminderNotification.deleteMany({ where: { billReminderId } });
@@ -129,7 +163,8 @@ export async function skipBillReminderCycle(billReminderId: number, requestorId:
       where: { id: billReminderId },
       data: {
         expenseId: null,
-        status: BillReminderStatus.NEEDS_NEXT_DATE,
+        dueDate: nextDueDate,
+        status: computeReminderStatus(nextDueDate, BillReminderStatus.UPCOMING),
       },
     });
   });
@@ -188,15 +223,34 @@ export async function submitBillReminderAmount(
     requestorId,
   );
 
-  await db.billReminder.update({
-    where: { id: billReminderId },
-    data: {
-      expenseId: expense.id,
-      status: reminder.isRecurring
-        ? BillReminderStatus.NEEDS_NEXT_DATE
-        : BillReminderStatus.COMPLETED,
-    },
-  });
+  // Resolving the cycle: recurring reminders auto-advance straight to their next
+  // Computed due date and UPCOMING; non-recurring reminders are simply COMPLETED.
+  if (reminder.recurrenceInterval !== null) {
+    const nextDueDate = computeNextDueDate(
+      reminder.dueDate,
+      reminder.recurrenceInterval,
+      reminder.customIntervalDays,
+    );
+    // ExpenseId reflects the *current* cycle's resolved expense only. We advance
+    // Straight into the next cycle here, so it's cleared back to null immediately
+    // (the just-resolved expense.id is still returned to the caller below).
+    await db.$transaction(async (tx) => {
+      await tx.billReminderNotification.deleteMany({ where: { billReminderId } });
+      await tx.billReminder.update({
+        where: { id: billReminderId },
+        data: {
+          expenseId: null,
+          dueDate: nextDueDate,
+          status: computeReminderStatus(nextDueDate, BillReminderStatus.UPCOMING),
+        },
+      });
+    });
+  } else {
+    await db.billReminder.update({
+      where: { id: billReminderId },
+      data: { expenseId: expense.id, status: BillReminderStatus.COMPLETED },
+    });
+  }
 
   return expense;
 }

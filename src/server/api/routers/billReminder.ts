@@ -1,3 +1,4 @@
+import { RecurrenceInterval } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -12,19 +13,35 @@ import {
   submitBillReminderAmount,
   updateBillReminderMembers,
 } from '../services/billReminderService';
+import { sendBillReminderTestNotification } from '../services/notificationService';
 
 const createBillReminderSchema = z
   .object({
     title: z.string().min(1),
     dueDate: z.date(),
-    isRecurring: z.boolean(),
+    recurrenceInterval: z.nativeEnum(RecurrenceInterval).nullable(),
+    customIntervalDays: z.number().int().positive().nullable(),
     groupId: z.number().nullable(),
     memberIds: z.array(z.number()),
   })
   .refine((v) => v.groupId === null || v.memberIds.length > 0, {
     message: 'Select at least one member to split the bill between',
     path: ['memberIds'],
-  });
+  })
+  .refine(
+    (v) => v.recurrenceInterval !== RecurrenceInterval.CUSTOM || v.customIntervalDays !== null,
+    {
+      message: 'Enter how many days between reminders',
+      path: ['customIntervalDays'],
+    },
+  )
+  .refine(
+    (v) => v.recurrenceInterval === RecurrenceInterval.CUSTOM || v.customIntervalDays === null,
+    {
+      message: 'customIntervalDays only applies to Custom recurrence',
+      path: ['customIntervalDays'],
+    },
+  );
 
 export const billReminderRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -121,6 +138,19 @@ export const billReminderRouter = createTRPCRouter({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: error instanceof Error ? error.message : 'Failed to delete reminder',
+        });
+      }
+    }),
+
+  sendTestNotification: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      try {
+        return await sendBillReminderTestNotification(input.id, ctx.session.user.id);
+      } catch (error) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: error instanceof Error ? error.message : 'Failed to send test notification',
         });
       }
     }),

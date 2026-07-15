@@ -1,10 +1,12 @@
-import { BillReminderStatus } from '@prisma/client';
+import { BillReminderStatus, RecurrenceInterval } from '@prisma/client';
 import { Bell, Repeat } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { DateSelector } from '~/components/AddExpense/DateSelector';
 import { AccountButton } from '~/components/Account/AccountButton';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
+import { CurrencyInput } from '~/components/ui/currency-input';
 import {
   Drawer,
   DrawerClose,
@@ -15,16 +17,16 @@ import {
   DrawerTrigger,
 } from '~/components/ui/drawer';
 import { Input } from '~/components/ui/input';
-import { Switch } from '~/components/ui/switch';
+import { NativeSelect, NativeSelectOption } from '~/components/ui/native-select';
 import { useTranslationWithUtils } from '~/hooks/useTranslationWithUtils';
 import { api } from '~/utils/api';
-import { CurrencyInput } from '~/components/ui/currency-input';
 
 interface ReminderListItem {
   id: number;
   title: string;
   dueDate: Date | string;
-  isRecurring: boolean;
+  recurrenceInterval: RecurrenceInterval | null;
+  customIntervalDays: number | null;
   status: BillReminderStatus;
   groupId: number | null;
   createdBy: number;
@@ -39,6 +41,26 @@ const statusLabel: Record<BillReminderStatus, string> = {
   COMPLETED: 'Completed',
 };
 
+const RECURRENCE_LABEL: Record<RecurrenceInterval, string> = {
+  MONTHLY: 'Monthly',
+  QUARTERLY: 'Quarterly',
+  HALF_YEARLY: 'Half-yearly',
+  YEARLY: 'Yearly',
+  CUSTOM: 'Custom',
+};
+
+// PWA note: iOS Safari auto-zooms on focus when a focused input's computed
+// Font-size is under 16px. Fixed at the source here (text-base = 16px, only
+// Stepping down to text-sm on sm:+ desktop viewports) rather than via
+// User-scalable=no/maximum-scale=1 on the viewport meta tag, which would
+// Disable pinch-zoom accessibility app-wide. Scoped to this feature's inputs
+// Since no site-wide convention exists yet to extend instead (see ui/input.tsx,
+// Ui/native-select.tsx — both still default to text-sm).
+const MOBILE_SAFE_TEXT = 'text-base sm:text-sm';
+// Prevents accidental double-tap-to-zoom on interactive elements without
+// Touching the global viewport zoom/pinch behavior.
+const TOUCH_TARGET = 'touch-manipulation min-h-11';
+
 export const BillReminders: React.FC = () => {
   const [open, setOpen] = useState(false);
 
@@ -50,7 +72,9 @@ export const BillReminders: React.FC = () => {
           Bill Reminders
         </AccountButton>
       </DrawerTrigger>
-      <DrawerContent className="max-h-[90vh]">
+      {/* Pb-[calc(...)] keeps content clear of the home indicator / notch in
+          standalone PWA mode on iOS (matchMedia('(display-mode: standalone)')). */}
+      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
         <DrawerHeader>
           <DrawerTitle>Bill Reminders</DrawerTitle>
         </DrawerHeader>
@@ -109,17 +133,19 @@ const BillReminderRow: React.FC<{
     onError: (e) => toast.error(e.message),
   });
 
-  const isPastDueRecurring =
-    reminder.status === BillReminderStatus.PAST_DUE && reminder.isRecurring;
-  const isPastDueNonRecurring =
-    reminder.status === BillReminderStatus.PAST_DUE && !reminder.isRecurring;
+  const isRecurring = reminder.recurrenceInterval !== null;
+  const isPastDueRecurring = reminder.status === BillReminderStatus.PAST_DUE && isRecurring;
+  const isPastDueNonRecurring = reminder.status === BillReminderStatus.PAST_DUE && !isRecurring;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
-      <button className="flex flex-col items-start text-left" onClick={() => setDetailOpen(true)}>
+    <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
+      <button
+        className={`flex flex-col items-start text-left ${TOUCH_TARGET}`}
+        onClick={() => setDetailOpen(true)}
+      >
         <div className="flex items-center gap-2 font-medium">
           {reminder.title}
-          {reminder.isRecurring && <Repeat className="text-muted-foreground size-3.5" />}
+          {isRecurring && <Repeat className="text-muted-foreground size-3.5" />}
         </div>
         <div className="text-muted-foreground text-xs">
           {toUIDate(new Date(reminder.dueDate), { useToday: true })} ·{' '}
@@ -127,20 +153,25 @@ const BillReminderRow: React.FC<{
         </div>
       </button>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {reminder.status === BillReminderStatus.NEEDS_NEXT_DATE && (
           <NextDueDateButton reminderId={reminder.id} />
         )}
 
         {isPastDueRecurring && (
           <>
-            <Button size="sm" variant="outline" onClick={() => setDetailOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className={TOUCH_TARGET}
+              onClick={() => setDetailOpen(true)}
+            >
               Enter amount
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              className="text-orange-600"
+              className={`text-orange-600 ${TOUCH_TARGET}`}
               disabled={skipCycleMutation.isPending}
               onClick={() => skipCycleMutation.mutate({ id: reminder.id })}
             >
@@ -153,7 +184,7 @@ const BillReminderRow: React.FC<{
           <Button
             size="sm"
             variant="ghost"
-            className="text-orange-600"
+            className={`text-orange-600 ${TOUCH_TARGET}`}
             onClick={() => deleteMutation.mutate({ id: reminder.id })}
           >
             Dismiss
@@ -172,7 +203,7 @@ const BillReminderRow: React.FC<{
 
 const NextDueDateButton: React.FC<{ reminderId: number }> = ({ reminderId }) => {
   const utils = api.useUtils();
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState<Date | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const mutation = api.billReminder.setNextDueDate.useMutation({
     onSuccess: () => {
@@ -185,7 +216,7 @@ const NextDueDateButton: React.FC<{ reminderId: number }> = ({ reminderId }) => 
 
   if (!open) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+      <Button size="sm" variant="outline" className={TOUCH_TARGET} onClick={() => setOpen(true)}>
         Update due date
       </Button>
     );
@@ -193,16 +224,12 @@ const NextDueDateButton: React.FC<{ reminderId: number }> = ({ reminderId }) => 
 
   return (
     <div className="flex items-center gap-1">
-      <Input
-        type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        className="h-8 w-36"
-      />
+      <DateSelector mode="single" required selected={date} onSelect={setDate} />
       <Button
         size="sm"
+        className={TOUCH_TARGET}
         disabled={!date}
-        onClick={() => mutation.mutate({ id: reminderId, dueDate: new Date(date) })}
+        onClick={() => date && mutation.mutate({ id: reminderId, dueDate: date })}
       >
         Save
       </Button>
@@ -214,8 +241,9 @@ const CreateBillReminderDrawer: React.FC = () => {
   const utils = api.useUtils();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [isRecurring, setIsRecurring] = useState(false);
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [recurrenceInterval, setRecurrenceInterval] = useState<RecurrenceInterval | null>(null);
+  const [customIntervalDays, setCustomIntervalDays] = useState('');
   const [groupId, setGroupId] = useState<number | null>(null);
   const [memberIds, setMemberIds] = useState<number[]>([]);
 
@@ -231,8 +259,9 @@ const CreateBillReminderDrawer: React.FC = () => {
       toast.success('Reminder created');
       setOpen(false);
       setTitle('');
-      setDueDate('');
-      setIsRecurring(false);
+      setDueDate(undefined);
+      setRecurrenceInterval(null);
+      setCustomIntervalDays('');
       setGroupId(null);
       setMemberIds([]);
     },
@@ -247,15 +276,25 @@ const CreateBillReminderDrawer: React.FC = () => {
     );
   };
 
+  const customDaysNum = Number(customIntervalDays);
+  const customDaysValid =
+    recurrenceInterval !== RecurrenceInterval.CUSTOM ||
+    (customIntervalDays.length > 0 && Number.isInteger(customDaysNum) && customDaysNum > 0);
+
   const canSubmit =
-    title.trim().length > 0 && dueDate.length > 0 && (groupId === null || memberIds.length > 0);
+    title.trim().length > 0 &&
+    dueDate !== undefined &&
+    (groupId === null || memberIds.length > 0) &&
+    customDaysValid;
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
-        <Button variant="outline">New Reminder</Button>
+        <Button variant="outline" className={TOUCH_TARGET}>
+          New Reminder
+        </Button>
       </DrawerTrigger>
-      <DrawerContent className="max-h-[90vh]">
+      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
         <DrawerHeader>
           <DrawerTitle>New Bill Reminder</DrawerTitle>
         </DrawerHeader>
@@ -263,6 +302,7 @@ const CreateBillReminderDrawer: React.FC = () => {
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium">Title</label>
             <Input
+              className={MOBILE_SAFE_TEXT}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Electricity bill"
@@ -271,7 +311,7 @@ const CreateBillReminderDrawer: React.FC = () => {
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium">Due date</label>
-            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <DateSelector mode="single" required selected={dueDate} onSelect={setDueDate} />
           </div>
 
           <div className="flex items-center justify-between">
@@ -280,6 +320,7 @@ const CreateBillReminderDrawer: React.FC = () => {
               <Button
                 size="sm"
                 variant={groupId === null ? 'default' : 'outline'}
+                className={TOUCH_TARGET}
                 onClick={() => {
                   setGroupId(null);
                   setMemberIds([]);
@@ -290,6 +331,7 @@ const CreateBillReminderDrawer: React.FC = () => {
               <Button
                 size="sm"
                 variant={groupId !== null ? 'default' : 'outline'}
+                className={TOUCH_TARGET}
                 onClick={() => setGroupId(groupsQuery.data?.[0]?.group.id ?? null)}
                 disabled={!groupsQuery.data?.length}
               >
@@ -302,8 +344,8 @@ const CreateBillReminderDrawer: React.FC = () => {
             <>
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium">Group</label>
-                <select
-                  className="border-input rounded-md border bg-transparent p-2"
+                <NativeSelect
+                  className={MOBILE_SAFE_TEXT}
                   value={groupId}
                   onChange={(e) => {
                     setGroupId(Number(e.target.value));
@@ -311,18 +353,19 @@ const CreateBillReminderDrawer: React.FC = () => {
                   }}
                 >
                   {groupsQuery.data?.map((gu) => (
-                    <option key={gu.group.id} value={gu.group.id}>
+                    <NativeSelectOption key={gu.group.id} value={gu.group.id}>
                       {gu.group.name}
-                    </option>
+                    </NativeSelectOption>
                   ))}
-                </select>
+                </NativeSelect>
               </div>
 
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium">Split between</label>
                 {groupMembers.map((gu) => (
-                  <label key={gu.userId} className="flex items-center gap-2 py-1">
+                  <label key={gu.userId} className={`flex items-center gap-2 ${TOUCH_TARGET}`}>
                     <Checkbox
+                      className="size-5"
                       checked={memberIds.includes(gu.userId)}
                       onCheckedChange={() => toggleMember(gu.userId)}
                     />
@@ -333,21 +376,63 @@ const CreateBillReminderDrawer: React.FC = () => {
             </>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">
-              Recurring (repeats on an inconsistent cycle)
-            </span>
-            <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium">Recurrence</label>
+            <NativeSelect
+              className={MOBILE_SAFE_TEXT}
+              value={recurrenceInterval ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                const isValidInterval = (Object.values(RecurrenceInterval) as string[]).includes(
+                  value,
+                );
+                setRecurrenceInterval(isValidInterval ? (value as RecurrenceInterval) : null);
+                if (value !== RecurrenceInterval.CUSTOM) {
+                  setCustomIntervalDays('');
+                }
+              }}
+            >
+              <NativeSelectOption value="">Not recurring</NativeSelectOption>
+              <NativeSelectOption value={RecurrenceInterval.MONTHLY}>Monthly</NativeSelectOption>
+              <NativeSelectOption value={RecurrenceInterval.QUARTERLY}>
+                Quarterly
+              </NativeSelectOption>
+              <NativeSelectOption value={RecurrenceInterval.HALF_YEARLY}>
+                Half-yearly
+              </NativeSelectOption>
+              <NativeSelectOption value={RecurrenceInterval.YEARLY}>Yearly</NativeSelectOption>
+              <NativeSelectOption value={RecurrenceInterval.CUSTOM}>Custom</NativeSelectOption>
+            </NativeSelect>
           </div>
+
+          {recurrenceInterval === RecurrenceInterval.CUSTOM && (
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Repeat every how many days?</label>
+              <Input
+                className={MOBILE_SAFE_TEXT}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={customIntervalDays}
+                onChange={(e) => setCustomIntervalDays(e.target.value)}
+                placeholder="e.g. 60"
+              />
+            </div>
+          )}
         </div>
         <DrawerFooter>
           <Button
+            className={TOUCH_TARGET}
             disabled={!canSubmit || createMutation.isPending}
             onClick={() =>
+              dueDate &&
               createMutation.mutate({
                 title: title.trim(),
-                dueDate: new Date(dueDate),
-                isRecurring,
+                dueDate,
+                recurrenceInterval,
+                customIntervalDays:
+                  recurrenceInterval === RecurrenceInterval.CUSTOM ? customDaysNum : null,
                 groupId,
                 memberIds,
               })
@@ -356,7 +441,9 @@ const CreateBillReminderDrawer: React.FC = () => {
             Create
           </Button>
           <DrawerClose asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost" className={TOUCH_TARGET}>
+              Cancel
+            </Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -417,17 +504,26 @@ const BillReminderDetailDrawer: React.FC<{
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh]">
+      <DrawerContent className="max-h-[90vh] pb-[env(safe-area-inset-bottom)]">
         <DrawerHeader>
           <DrawerTitle>{reminder.title}</DrawerTitle>
+          {reminder.recurrenceInterval && (
+            <p className="text-muted-foreground text-xs">
+              Recurs {RECURRENCE_LABEL[reminder.recurrenceInterval].toLowerCase()}
+              {reminder.recurrenceInterval === RecurrenceInterval.CUSTOM &&
+                reminder.customIntervalDays &&
+                ` (every ${reminder.customIntervalDays} days)`}
+            </p>
+          )}
         </DrawerHeader>
         <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-6">
           {reminder.groupId !== null && (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">Split between</label>
               {groupMembers.map((gu) => (
-                <label key={gu.userId} className="flex items-center gap-2 py-1">
+                <label key={gu.userId} className={`flex items-center gap-2 ${TOUCH_TARGET}`}>
                   <Checkbox
+                    className="size-5"
                     checked={memberIds.includes(gu.userId)}
                     onCheckedChange={() => toggleMember(gu.userId)}
                   />
@@ -437,7 +533,7 @@ const BillReminderDetailDrawer: React.FC<{
               <Button
                 size="sm"
                 variant="outline"
-                className="mt-1 w-fit"
+                className={`mt-1 w-fit ${TOUCH_TARGET}`}
                 disabled={memberIds.length === 0}
                 onClick={() => updateMembersMutation.mutate({ id: reminder.id, memberIds })}
               >
@@ -450,6 +546,7 @@ const BillReminderDetailDrawer: React.FC<{
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">Enter bill amount</label>
               <CurrencyInput
+                className={MOBILE_SAFE_TEXT}
                 currency={currency}
                 strValue={amountStr}
                 onValueChange={({
@@ -468,7 +565,7 @@ const BillReminderDetailDrawer: React.FC<{
                 }}
               />
               <Button
-                className="mt-2"
+                className={`mt-2 ${TOUCH_TARGET}`}
                 disabled={amount <= 0n || submitAmountMutation.isPending}
                 onClick={() => submitAmountMutation.mutate({ id: reminder.id, amount, currency })}
               >

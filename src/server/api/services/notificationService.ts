@@ -530,6 +530,45 @@ async function sendBillReminderNotificationOnce(
   await sendPushNotificationToUsers([userId], pushData);
 }
 
+/**
+ * Debug-only: fires a real push through the same sendPushNotificationToUsers
+ * pipeline and the same copy generator checkBillReminderNotifications uses,
+ * against a genuine reminder the caller owns/is part of — bypassing the
+ * day-count/threshold gate so it fires immediately. Never fabricates reminder
+ * data; throws if the reminder doesn't exist or isn't visible to the caller.
+ */
+export async function sendBillReminderTestNotification(
+  billReminderId: number,
+  requestorId: number,
+) {
+  const reminder = await db.billReminder.findUnique({
+    where: { id: billReminderId },
+    include: { group: { select: { id: true, name: true } }, members: true },
+  });
+
+  if (!reminder) {
+    throw new Error('Reminder not found');
+  }
+  const isVisible =
+    reminder.createdBy === requestorId || reminder.members.some((m) => m.userId === requestorId);
+  if (!isVisible) {
+    throw new Error('Reminder not visible to this user');
+  }
+
+  const message =
+    reminder.groupId === null || !reminder.group
+      ? PERSONAL_DUE_TODAY_COPY(reminder.title)
+      : reminder.createdBy === requestorId
+        ? CREATOR_PROMPT_COPY[3]!(reminder.title, reminder.group.name)
+        : MEMBER_NOTICE_COPY[3]!(reminder.title, reminder.group.name);
+
+  return sendPushNotificationToUsers([requestorId], {
+    title: 'Bill Reminder (test)',
+    message,
+    data: { url: reminder.groupId ? `/groups/${reminder.groupId}` : '/account' },
+  });
+}
+
 export async function checkBillReminderNotifications() {
   try {
     await refreshOverdueStatuses();

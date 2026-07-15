@@ -1,4 +1,5 @@
-import { BillReminderStatus } from '@prisma/client';
+import { BillReminderStatus, RecurrenceInterval } from '@prisma/client';
+import { addDays, addMonths, addQuarters, addYears } from 'date-fns';
 
 /**
  * Equal split, integer-division based: remainder pennies go to the lowest
@@ -24,6 +25,39 @@ export const computeEqualSplitParticipants = (
     userId,
     amount: userId === payerId ? amount - shares.get(userId)! : -shares.get(userId)!,
   }));
+};
+
+/**
+ * Next due date for an interval-based recurring reminder. MONTHLY/QUARTERLY/
+ * HALF_YEARLY/YEARLY all overflow-clamp to the last day of the target month
+ * (date-fns' addMonths/addQuarters/addYears already do this natively — e.g.
+ * Jan 31 + 1 month -> Feb 28/29, not Mar 3) per explicit product decision.
+ * CUSTOM has no month-length concept, so it's a plain day offset.
+ */
+export const computeNextDueDate = (
+  currentDueDate: Date,
+  interval: RecurrenceInterval,
+  customIntervalDays: number | null,
+): Date => {
+  switch (interval) {
+    case RecurrenceInterval.MONTHLY:
+      return addMonths(currentDueDate, 1);
+    case RecurrenceInterval.QUARTERLY:
+      return addQuarters(currentDueDate, 1);
+    case RecurrenceInterval.HALF_YEARLY:
+      return addMonths(currentDueDate, 6);
+    case RecurrenceInterval.YEARLY:
+      return addYears(currentDueDate, 1);
+    case RecurrenceInterval.CUSTOM:
+      if (customIntervalDays === null) {
+        throw new Error('customIntervalDays is required for CUSTOM recurrence');
+      }
+      return addDays(currentDueDate, customIntervalDays);
+    default: {
+      const exhaustiveCheck: never = interval;
+      throw new Error(`Unhandled recurrence interval: ${String(exhaustiveCheck)}`);
+    }
+  }
 };
 
 /**

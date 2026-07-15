@@ -16,11 +16,49 @@ import { toast } from 'sonner';
 import { env } from '~/env';
 import { cn } from '~/lib/utils';
 import { Button } from '../ui/button';
+import { NativeSelect, NativeSelectOption } from '../ui/native-select';
 
 export const DebugInfo: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { t } = useTranslation('common');
   const [newVersion, setNewVersion] = React.useState<string | null>(null);
   const sendTestPushNotification = api.user.sendTestPushNotification.useMutation();
+
+  const billRemindersQuery = api.billReminder.list.useQuery();
+  const [selectedReminderId, setSelectedReminderId] = React.useState<number | null>(null);
+  // "Most recent" = most recently created, not soonest-due (the list itself is
+  // Sorted by dueDate for the main UI — sort separately here).
+  const { billReminders, mostRecentReminderId } = React.useMemo(() => {
+    const data = billRemindersQuery.data ?? [];
+    const sorted = [...data].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    return { billReminders: data, mostRecentReminderId: sorted[0]?.id ?? null };
+  }, [billRemindersQuery.data]);
+  const effectiveReminderId = selectedReminderId ?? mostRecentReminderId;
+  const sendTestBillReminderNotification = api.billReminder.sendTestNotification.useMutation();
+
+  const onSendTestBillReminderNotification = useCallback(async () => {
+    if (effectiveReminderId === null) {
+      return;
+    }
+    try {
+      const result = await sendTestBillReminderNotification.mutateAsync({
+        id: effectiveReminderId,
+      });
+      if (0 === result.sentCount) {
+        toast.error(
+          result.error
+            ? `${t('account.debug_info_details.test_notification_failed')}: ${result.error}`
+            : t('account.debug_info_details.test_notification_failed'),
+        );
+        return;
+      }
+      toast.success(t('account.debug_info_details.test_notification_sent'));
+    } catch (error) {
+      toast.error(t('account.debug_info_details.test_notification_failed'));
+      console.error('Failed to send test bill reminder notification:', error);
+    }
+  }, [effectiveReminderId, sendTestBillReminderNotification, t]);
 
   useEffect(() => {
     // Check github releases API for latest version
@@ -110,6 +148,47 @@ export const DebugInfo: React.FC<React.PropsWithChildren> = ({ children }) => {
                 {t('account.debug_info_details.new_version_available')}: {newVersion}
               </p>
             ) : null}
+
+            {/* Debug/test-only block — visually distinct (dashed border, warning
+                tint) from everyday controls so it doesn't read as a real user
+                action. Fires a genuine push through the same pipeline
+                checkBillReminderNotifications uses, against a real reminder,
+                bypassing the day-count threshold gate so it fires immediately. */}
+            <div className="mt-4 flex flex-col gap-2 rounded-md border border-dashed border-yellow-600/50 bg-yellow-600/5 p-3">
+              <span className="text-xs font-semibold tracking-wide text-yellow-600 uppercase">
+                Debug: send test bill reminder
+              </span>
+              {billReminders.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  No bill reminders exist yet — create one first to test its notification.
+                </p>
+              ) : (
+                <>
+                  <NativeSelect
+                    className="text-base sm:text-sm"
+                    value={effectiveReminderId ?? ''}
+                    onChange={(e) => setSelectedReminderId(Number(e.target.value))}
+                  >
+                    {billReminders.map((reminder) => (
+                      <NativeSelectOption key={reminder.id} value={reminder.id}>
+                        {reminder.title}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <Button
+                    variant="secondary"
+                    className="touch-manipulation border border-dashed border-yellow-600/50"
+                    disabled={effectiveReminderId === null}
+                    onClick={() => {
+                      void onSendTestBillReminderNotification();
+                    }}
+                    loading={sendTestBillReminderNotification.isPending}
+                  >
+                    Send test bill reminder notification
+                  </Button>
+                </>
+              )}
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

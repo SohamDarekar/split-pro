@@ -1,4 +1,4 @@
-import { BillReminderStatus } from '@prisma/client';
+import { BillReminderStatus, RecurrenceInterval } from '@prisma/client';
 import {
   CREATOR_OVERDUE_COPY,
   CREATOR_OVERDUE_THRESHOLDS,
@@ -8,6 +8,7 @@ import {
   MEMBER_THRESHOLDS,
   PERSONAL_DUE_TODAY_COPY,
   computeEqualSplitParticipants,
+  computeNextDueDate,
   computeReminderStatus,
   daysUntil,
 } from '~/lib/billReminder';
@@ -35,6 +36,79 @@ describe('computeEqualSplitParticipants', () => {
   it('sums to zero regardless of payer position', () => {
     const result = computeEqualSplitParticipants(101n, 2, [1, 2, 3, 4]);
     expect(result.reduce((acc, p) => acc + p.amount, 0n)).toBe(0n);
+  });
+});
+
+describe('computeNextDueDate', () => {
+  it('MONTHLY advances one month, same day', () => {
+    const result = computeNextDueDate(
+      new Date('2026-03-15T00:00:00'),
+      RecurrenceInterval.MONTHLY,
+      null,
+    );
+    expect(result).toEqual(new Date('2026-04-15T00:00:00'));
+  });
+
+  it('MONTHLY clamps Jan 31 -> Feb 28 in a non-leap year (chosen overflow rule)', () => {
+    const result = computeNextDueDate(
+      new Date('2027-01-31T00:00:00'),
+      RecurrenceInterval.MONTHLY,
+      null,
+    );
+    expect(result).toEqual(new Date('2027-02-28T00:00:00'));
+  });
+
+  it('MONTHLY clamps Jan 31 -> Feb 29 in a leap year', () => {
+    const result = computeNextDueDate(
+      new Date('2028-01-31T00:00:00'),
+      RecurrenceInterval.MONTHLY,
+      null,
+    );
+    expect(result).toEqual(new Date('2028-02-29T00:00:00'));
+  });
+
+  it('QUARTERLY advances 3 months, clamping the same way', () => {
+    const result = computeNextDueDate(
+      new Date('2026-11-30T00:00:00'),
+      RecurrenceInterval.QUARTERLY,
+      null,
+    );
+    // Nov 30 + 3 months -> Feb 28/29 has no day-30 issue here (Feb 2027 has 28 days,
+    // Nov->Feb spans a non-leap Feb) so this exercises the same clamp path.
+    expect(result).toEqual(new Date('2027-02-28T00:00:00'));
+  });
+
+  it('HALF_YEARLY advances 6 months', () => {
+    const result = computeNextDueDate(
+      new Date('2026-08-31T00:00:00'),
+      RecurrenceInterval.HALF_YEARLY,
+      null,
+    );
+    expect(result).toEqual(new Date('2027-02-28T00:00:00'));
+  });
+
+  it('YEARLY advances one year, same day (Feb 29 -> Feb 28 in a non-leap target year)', () => {
+    const result = computeNextDueDate(
+      new Date('2028-02-29T00:00:00'),
+      RecurrenceInterval.YEARLY,
+      null,
+    );
+    expect(result).toEqual(new Date('2029-02-28T00:00:00'));
+  });
+
+  it('CUSTOM advances by exactly customIntervalDays', () => {
+    const result = computeNextDueDate(
+      new Date('2026-07-01T00:00:00'),
+      RecurrenceInterval.CUSTOM,
+      60,
+    );
+    expect(result).toEqual(new Date('2026-08-30T00:00:00'));
+  });
+
+  it('CUSTOM throws if customIntervalDays is missing', () => {
+    expect(() =>
+      computeNextDueDate(new Date('2026-07-01T00:00:00'), RecurrenceInterval.CUSTOM, null),
+    ).toThrow('customIntervalDays is required');
   });
 });
 
