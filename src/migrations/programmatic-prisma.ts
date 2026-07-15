@@ -4,13 +4,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { db } from '~/server/db';
 import { env } from '~/env';
+import { splitSqlStatements } from './splitSqlStatements';
 
 const migrationsPath = `${process.cwd()}/prisma/migrations`;
 
 export async function runDbMigrations() {
   console.info(`Running DB migrations for "${env.NODE_ENV}"`);
 
-  // check if any migrations have been applied
+  // Check if any migrations have been applied
   const migrationsTable: ({ exists: boolean } | undefined)[] = await db.$queryRaw`
     SELECT EXISTS(
       SELECT * 
@@ -59,7 +60,7 @@ export async function runDbMigrations() {
 
   let totalMigrationsApplied = 0;
   for (const localMigrationName of localMigrations) {
-    // find local migration in all DB migrations
+    // Find local migration in all DB migrations
     const existingMigration = dbMigrations.find(
       (migration) => migration.migration_name === localMigrationName,
     );
@@ -77,11 +78,11 @@ export async function runDbMigrations() {
         'utf8',
       );
 
-      // executeRawUnsafe cannot insert multiple commands into a prepared statement
-      const migrationStatements = migrationContents
-        .split(';\n\n')
-        .map((stmt) => stmt.trim() + ';')
-        .filter((stmt) => stmt.length > 0);
+      // ExecuteRawUnsafe cannot insert multiple commands into a prepared statement.
+      // SplitSqlStatements is dollar-quote/string-literal aware (not a naive
+      // Semicolon split) so DO $$...$$ blocks and CREATE FUNCTION bodies survive
+      // Intact as single statements. See splitSqlStatements.ts for details.
+      const migrationStatements = splitSqlStatements(migrationContents);
 
       const ops = [
         ...migrationStatements.map((stmt) => db.$executeRawUnsafe(stmt)),
