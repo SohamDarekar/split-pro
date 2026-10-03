@@ -3,7 +3,15 @@ import { isSameDay } from 'date-fns';
 import { type User as NextUser } from 'next-auth';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { ArrowRightIcon, CheckCircle2, Landmark, Merge, PencilIcon, Users } from 'lucide-react';
+import {
+  ArrowRightIcon,
+  CheckCircle2,
+  Landmark,
+  Merge,
+  PencilIcon,
+  Undo2,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 import React, { type ComponentProps, useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -201,6 +209,7 @@ const ExpenseParticipantEntry: React.FC<{
   const verbKey = isPositive ? (isFullySettled ? 'got' : 'get') : isSettledDebtor ? 'paid' : 'owe';
 
   const settleMutation = api.expense.settleExpenseForUser.useMutation();
+  const unsettleMutation = api.expense.unsettleExpenseForUser.useMutation();
 
   const canSettleForMe =
     isCurrentUser &&
@@ -224,6 +233,25 @@ const ExpenseParticipantEntry: React.FC<{
       },
     );
   }, [expenseId, userId, settleMutation, onSettled, t]);
+
+  // Only the debtor who marked their share as paid can revert it
+  const canUnsettle = isCurrentUser && isSettledDebtor && expenseId !== undefined;
+
+  const handleUnsettle = useCallback(() => {
+    if (!expenseId) {
+      return;
+    }
+    unsettleMutation.mutate(
+      { expenseId },
+      {
+        onSuccess: onSettled,
+        onError: (error) => {
+          console.error('Error while unsettling expense:', error);
+          toast.error(t('errors.setting_update_failed'));
+        },
+      },
+    );
+  }, [expenseId, unsettleMutation, onSettled, t]);
 
   return (
     <div key={participant.userId} className="flex flex-wrap items-center gap-2 text-sm">
@@ -252,6 +280,18 @@ const ExpenseParticipantEntry: React.FC<{
         >
           <CheckCircle2 className="mr-1 size-3" />
           {t('actions.settle_for_me')}
+        </Button>
+      )}
+      {canUnsettle && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          disabled={unsettleMutation.isPending}
+          onClick={handleUnsettle}
+        >
+          <Undo2 className="mr-1 size-3" />
+          {t('actions.unsettle')}
         </Button>
       )}
     </div>

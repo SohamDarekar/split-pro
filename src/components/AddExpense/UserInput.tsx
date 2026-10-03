@@ -1,5 +1,6 @@
 import { useTranslation } from 'next-i18next';
 import Router from 'next/router';
+import { useMemo } from 'react';
 import { z } from 'zod';
 
 import { useAddExpenseStore } from '~/store/addStore';
@@ -25,12 +26,28 @@ export const UserInput: React.FC<{
   const group = useAddExpenseStore((s) => s.group);
 
   const addFriendMutation = api.user.inviteFriend.useMutation();
+  const groupsQuery = api.group.getAllGroups.useQuery(undefined, { enabled: Boolean(group) });
+
+  // Participants added individually on top of the selected group's members
+  const extraParticipants = useMemo(() => {
+    if (!group || !groupsQuery.data) {
+      return [];
+    }
+    const groupMemberIds = new Set(
+      groupsQuery.data
+        .find((g) => g.groupId === group.id)
+        ?.group.groupUsers.map((gu) => gu.userId) ?? [],
+    );
+    return participants.filter((p) => p.id !== currentUser?.id && !groupMemberIds.has(p.id));
+  }, [group, groupsQuery.data, participants, currentUser?.id]);
 
   const isEmail = z.string().email().safeParse(nameOrEmail);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ('Backspace' === e.key && '' === nameOrEmail) {
-      if (group) {
+      if (group && 0 < extraParticipants.length) {
+        removeParticipant(extraParticipants[extraParticipants.length - 1]!.id);
+      } else if (group) {
         const currentPath = window.location.pathname;
         const searchParams = new URLSearchParams(window.location.search);
         searchParams.delete('groupId');
@@ -80,18 +97,14 @@ export const UserInput: React.FC<{
           <EntityAvatar entity={group} size={30} />
           <p className="text-xs">{group.name}</p>
         </div>
-      ) : (
-        participants.map((p) =>
-          p.id !== currentUser?.id ? (
-            <div
-              key={p.id}
-              className="flex items-center gap-2 rounded-full bg-slate-800 p-0.5 pr-4"
-            >
-              <EntityAvatar entity={p} size={30} />
-              <p className="text-xs">{p.name ?? p.email}</p>
-            </div>
-          ) : null,
-        )
+      ) : null}
+      {(group ? extraParticipants : participants).map((p) =>
+        p.id !== currentUser?.id ? (
+          <div key={p.id} className="flex items-center gap-2 rounded-full bg-slate-800 p-0.5 pr-4">
+            <EntityAvatar entity={p} size={30} />
+            <p className="text-xs">{p.name ?? p.email}</p>
+          </div>
+        ) : null,
       )}
 
       <input

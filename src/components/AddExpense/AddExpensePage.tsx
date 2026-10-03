@@ -313,7 +313,10 @@ export const AddOrEditExpensePage: React.FC<{
       </div>
       <UserInput isEditing={Boolean(expenseId)} />
       {showFriends || (1 === participants.length && !group) ? (
-        <SelectUserOrGroup enableSendingInvites={enableSendingInvites} />
+        <SelectUserOrGroup
+          enableSendingInvites={enableSendingInvites}
+          isEditing={Boolean(expenseId)}
+        />
       ) : (
         <>
           <div className="mt-4 flex gap-2.5 sm:mt-10">

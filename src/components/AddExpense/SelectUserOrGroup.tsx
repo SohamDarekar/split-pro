@@ -15,7 +15,8 @@ import { Button } from '../ui/button';
 
 export const SelectUserOrGroup: React.FC<{
   enableSendingInvites: boolean;
-}> = ({ enableSendingInvites }) => {
+  isEditing?: boolean;
+}> = ({ enableSendingInvites, isEditing }) => {
   const { t } = useTranslation();
   const nameOrEmail = useAddExpenseStore((s) => s.nameOrEmail);
   const participants = useAddExpenseStore((s) => s.participants);
@@ -80,12 +81,16 @@ export const SelectUserOrGroup: React.FC<{
   const onGroupSelect = useCallback(
     (group: Group & { groupUsers: (GroupUser & { user: User })[] }) => {
       setGroup(group);
-      const { currentUser } = useAddExpenseStore.getState();
+      const { currentUser, participants: currentParticipants } = useAddExpenseStore.getState();
       if (currentUser) {
-        setParticipants([
-          currentUser,
-          ...group.groupUsers.map((gu) => gu.user).filter((u) => u.id !== currentUser.id),
-        ]);
+        const groupMembers = group.groupUsers
+          .map((gu) => gu.user)
+          .filter((u) => u.id !== currentUser.id);
+        // Keep individually selected users that are not part of the group
+        const extraParticipants = currentParticipants.filter(
+          (p) => p.id !== currentUser.id && !groupMembers.some((m) => m.id === p.id),
+        );
+        setParticipants([currentUser, ...groupMembers, ...extraParticipants]);
       }
       setNameOrEmail('');
     },
@@ -93,14 +98,6 @@ export const SelectUserOrGroup: React.FC<{
   );
 
   const handleAddEmailClickFalse = useCallback(() => onAddEmailClick(false), [onAddEmailClick]);
-
-  if (group) {
-    return (
-      <div className="mt-4 text-center text-red-500">
-        {t('expense_details.add_expense_details.select_user_or_group.only_one_group_time')}
-      </div>
-    );
-  }
 
   const handleFriendClick = useCallback(
     (f: User) => {
@@ -177,8 +174,12 @@ export const SelectUserOrGroup: React.FC<{
           </>
         ) : null}
 
-        {/*Can't select multiple groups or groups with outside ppl */}
-        {filteredGroups?.length && 1 === participants.length ? (
+        {/* Only one group per expense, but individual users can be mixed in */}
+        {group ? (
+          <div className="mt-8 text-center text-sm text-gray-500">
+            {t('expense_details.add_expense_details.select_user_or_group.only_one_group_time')}
+          </div>
+        ) : filteredGroups?.length && !isEditing ? (
           <>
             <div className="mt-8 text-gray-500">{t('actors.groups')}</div>
             <div className="mt-2 flex flex-col gap-1">
@@ -198,7 +199,7 @@ export const SelectUserOrGroup: React.FC<{
           </>
         ) : null}
 
-        {0 === filteredFriends?.length && 0 === filteredGroups?.length ? (
+        {0 === filteredFriends?.length && (group || isEditing || 0 === filteredGroups?.length) ? (
           <div className="mt-[30%] flex flex-col items-center justify-center gap-20 transition-discrete starting:opacity-0">
             <Image alt="empty user image" src="/empty_img.svg" width={250} height={250} />
           </div>

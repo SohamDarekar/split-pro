@@ -292,6 +292,29 @@ export const expenseRouter = createTRPCRouter({
             message: 'Failed to create expense',
           });
         }
+
+        // Individually added users must be group members so group balances stay consistent.
+        // Only on create, and only when the caller is a member, so non-members can't join groups
+        // And edits of old expenses don't re-add users who have left.
+        const { groupId } = input;
+        const callerMembership =
+          null !== groupId && !input.expenseId
+            ? await db.groupUser.findUnique({
+                where: { groupId_userId: { groupId, userId: ctx.session.user.id } },
+              })
+            : null;
+        if (null !== groupId && callerMembership) {
+          const { count } = await db.groupUser.createMany({
+            data: input.participants
+              .filter((p) => 0n !== p.amount)
+              .map((p) => ({ groupId, userId: p.userId })),
+            skipDuplicates: true,
+          });
+          if (0 < count) {
+            // Same as group.addMembers: default split no longer matches membership
+            await db.groupDefaultSplit.deleteMany({ where: { groupId } });
+          }
+        }
       }
 
       return results;
@@ -824,6 +847,38 @@ export const expenseRouter = createTRPCRouter({
       await db.expenseParticipant.update({
         where: { expenseId_userId: { expenseId: input.expenseId, userId: input.userId } },
         data: { settledAt: new Date() },
+      });
+    }),
+
+  unsettleExpenseForUser: protectedProcedure
+    .input(z.object({ expenseId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const expense = await db.expense.findUnique({
+        where: { id: input.expenseId },
+        select: { deletedAt: true },
+      });
+
+      if (!expense || expense.deletedAt) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
+      }
+
+      // Only the user who made the payment can revert it, never the receiving payer
+      const participant = await db.expenseParticipant.findUnique({
+        where: {
+          expenseId_userId: { expenseId: input.expenseId, userId: ctx.session.user.id },
+        },
+        select: { amount: true, settledAt: true },
+      });
+
+      if (!participant || 0n <= participant.amount || null === participant.settledAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to unsettle' });
+      }
+
+      await db.expenseParticipant.update({
+        where: {
+          expenseId_userId: { expenseId: input.expenseId, userId: ctx.session.user.id },
+        },
+        data: { settledAt: null },
       });
     }),
 });
