@@ -113,7 +113,7 @@ export const UserInput: React.FC<{
           isEditing && Boolean(group)
             ? t('expense_details.add_expense_details.user_input.cannot_change_group')
             : group
-              ? t('expense_details.add_expense_details.user_input.remove_group')
+              ? t('expense_details.add_expense_details.user_input.add_remove_group_or_person')
               : 1 < participants.length
                 ? t('expense_details.add_expense_details.user_input.add_more_friends')
                 : t('expense_details.add_expense_details.user_input.search_friends')

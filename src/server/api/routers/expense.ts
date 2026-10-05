@@ -14,6 +14,7 @@ import {
   getCurrencyRateSchema,
 } from '~/types/expense.types';
 import { createExpense, deleteExpense, editExpense } from '../services/splitService';
+import { sendExpenseUnsettledNotification } from '../services/notificationService';
 import { currencyRateProvider } from '../services/currencyRateService';
 import { type CurrencyCode, isCurrencyCode } from '~/lib/currency';
 import { SplitType } from '@prisma/client';
@@ -851,35 +852,50 @@ export const expenseRouter = createTRPCRouter({
     }),
 
   unsettleExpenseForUser: protectedProcedure
-    .input(z.object({ expenseId: z.string() }))
+    .input(z.object({ expenseId: z.string(), userId: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const expense = await db.expense.findUnique({
         where: { id: input.expenseId },
-        select: { deletedAt: true },
+        select: { paidBy: true, deletedAt: true, splitType: true },
       });
 
       if (!expense || expense.deletedAt) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
       }
 
-      // Only the user who made the payment can revert it, never the receiving payer
+      if (PER_EXPENSE_EXCLUDED_SPLIT_TYPES.includes(expense.splitType)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot unsettle this expense type' });
+      }
+
+      // Only the user who paid the expense can revert a settled share, never the debtors
+      if (ctx.session.user.id !== expense.paidBy) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Only the payer can unsettle this expense',
+        });
+      }
+
       const participant = await db.expenseParticipant.findUnique({
-        where: {
-          expenseId_userId: { expenseId: input.expenseId, userId: ctx.session.user.id },
-        },
+        where: { expenseId_userId: { expenseId: input.expenseId, userId: input.userId } },
         select: { amount: true, settledAt: true },
       });
 
-      if (!participant || 0n <= participant.amount || null === participant.settledAt) {
+      if (
+        !participant ||
+        input.userId === expense.paidBy ||
+        0n <= participant.amount ||
+        null === participant.settledAt
+      ) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to unsettle' });
       }
 
       await db.expenseParticipant.update({
-        where: {
-          expenseId_userId: { expenseId: input.expenseId, userId: ctx.session.user.id },
-        },
+        where: { expenseId_userId: { expenseId: input.expenseId, userId: input.userId } },
         data: { settledAt: null },
       });
+
+      // Fire-and-forget like other push notifications; failures are logged inside
+      sendExpenseUnsettledNotification(input.expenseId, input.userId).catch(console.error);
     }),
 });
 

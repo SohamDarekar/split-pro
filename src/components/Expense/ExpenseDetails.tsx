@@ -161,6 +161,7 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
               isFullySettled={isFullySettled(expense.expenseParticipants)}
               expenseId={expense.id}
               splitType={expense.splitType}
+              isViewerPayer={expense.paidBy === user.id}
               onSettled={onSettled}
             />
           ))}
@@ -196,8 +197,18 @@ const ExpenseParticipantEntry: React.FC<{
   isFullySettled: boolean;
   expenseId?: string;
   splitType?: SplitType;
+  isViewerPayer?: boolean;
   onSettled?: () => void;
-}> = ({ participant, userId, currency, isFullySettled, expenseId, splitType, onSettled }) => {
+}> = ({
+  participant,
+  userId,
+  currency,
+  isFullySettled,
+  expenseId,
+  splitType,
+  isViewerPayer,
+  onSettled,
+}) => {
   const { displayName, t, toUIDate, getCurrencyHelpersCached } = useTranslationWithUtils();
   const { toUIString } = getCurrencyHelpersCached(currency);
 
@@ -234,15 +245,20 @@ const ExpenseParticipantEntry: React.FC<{
     );
   }, [expenseId, userId, settleMutation, onSettled, t]);
 
-  // Only the debtor who marked their share as paid can revert it
-  const canUnsettle = isCurrentUser && isSettledDebtor && expenseId !== undefined;
+  // Only the payer of the expense can revert a debtor's settled share
+  const canUnsettle =
+    Boolean(isViewerPayer) &&
+    !isCurrentUser &&
+    isSettledDebtor &&
+    expenseId !== undefined &&
+    splitType !== SplitType.SETTLEMENT;
 
   const handleUnsettle = useCallback(() => {
     if (!expenseId) {
       return;
     }
     unsettleMutation.mutate(
-      { expenseId },
+      { expenseId, userId: participant.userId },
       {
         onSuccess: onSettled,
         onError: (error) => {
@@ -251,7 +267,7 @@ const ExpenseParticipantEntry: React.FC<{
         },
       },
     );
-  }, [expenseId, unsettleMutation, onSettled, t]);
+  }, [expenseId, participant.userId, unsettleMutation, onSettled, t]);
 
   return (
     <div key={participant.userId} className="flex flex-wrap items-center gap-2 text-sm">

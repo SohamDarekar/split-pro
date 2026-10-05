@@ -237,6 +237,7 @@
       },
       "user_input": {
         "add_more_friends": "Search friends, groups or add email",
+        "add_remove_group_or_person": "Add/remove group or person",
         "cannot_change_group": "Cannot change group while editing",
         "remove_group": "Press delete to remove group",
         "search_friends": "Search friends, groups or add email"

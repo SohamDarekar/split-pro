@@ -298,6 +298,42 @@ export async function sendGroupSimplifyDebtsToggleNotification(
   }
 }
 
+export async function sendExpenseUnsettledNotification(expenseId: string, debtorId: number) {
+  try {
+    const participant = await db.expenseParticipant.findUnique({
+      where: { expenseId_userId: { expenseId, userId: debtorId } },
+      select: {
+        amount: true,
+        expense: {
+          select: {
+            name: true,
+            currency: true,
+            paidByUser: { select: { name: true, email: true } },
+          },
+        },
+      },
+    });
+
+    if (!participant) {
+      return;
+    }
+
+    const { expense } = participant;
+    const { toUIString } = getCurrencyHelpers({
+      currency: isCurrencyCode(expense.currency) ? expense.currency : 'USD',
+    });
+    const payerName = expense.paidByUser.name ?? expense.paidByUser.email ?? 'Someone';
+
+    await sendPushNotificationToUsers([debtorId], {
+      title: 'Payment pending',
+      message: `${payerName} marked your payment of ${toUIString(-participant.amount)} for "${expense.name}" as unpaid. You have a payment pending.`,
+      data: { url: `/expenses/${expenseId}` },
+    });
+  } catch (error) {
+    console.error('Error sending expense unsettled notification', error);
+  }
+}
+
 export async function checkRecurrenceNotifications() {
   try {
     const recurrences = await db.expenseRecurrence.findMany({
