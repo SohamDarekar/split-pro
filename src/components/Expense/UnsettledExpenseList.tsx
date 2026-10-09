@@ -9,7 +9,9 @@ import { CategoryIcon } from '~/components/ui/categoryIcons';
 import { type ExpenseRouter } from '~/server/api/routers/expense';
 import { api } from '~/utils/api';
 
-type UnsettledExpense = NonNullable<inferRouterOutputs<ExpenseRouter>['getUnsettledExpenses'][number]>;
+type UnsettledExpense = NonNullable<
+  inferRouterOutputs<ExpenseRouter>['getUnsettledExpenses'][number]
+>;
 
 const UnsettledExpenseRow: React.FC<{
   expense: UnsettledExpense;
@@ -53,22 +55,24 @@ const UnsettledExpenseRow: React.FC<{
   return (
     <div className="flex flex-col gap-2 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-2">
-        <Link href={`/expenses/${expense.id}`} className="flex items-center gap-2 min-w-0">
+        <Link href={`/expenses/${expense.id}`} className="flex min-w-0 items-center gap-2">
           <CategoryIcon category={expense.category} className="size-5 shrink-0 text-gray-400" />
           <div className="min-w-0">
             <p className="truncate font-medium">{expense.name}</p>
             <p className="text-sm text-gray-500">{toUIDate(expense.expenseDate)}</p>
           </div>
         </Link>
-        <div className="text-right shrink-0">
+        <div className="shrink-0 text-right">
           <p className="font-semibold">{toUIString(expense.amount)}</p>
           <p className="text-sm text-gray-500">
-            {isPayer ? t('ui.expense.you.paid') : expense.paidByUser.name ?? expense.paidByUser.email}
+            {isPayer
+              ? t('ui.expense.you.paid')
+              : (expense.paidByUser.name ?? expense.paidByUser.email)}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 ml-7">
+      <div className="ml-7 flex flex-col gap-1">
         {isPayer
           ? unsettledDebtors.map((p) => (
               <div key={p.userId} className="flex items-center justify-between gap-2">
@@ -128,12 +132,12 @@ export const UnsettledExpenseList: React.FC<{
     void apiUtils.expense.getUnsettledExpenses.invalidate();
   };
 
-  if (query.isPending) return null;
+  if (query.isPending) {
+    return null;
+  }
 
   if (!query.data?.length) {
-    return (
-      <div className="mt-8 text-center text-gray-400">{t('ui.no_unsettled_expenses')}</div>
-    );
+    return <div className="mt-8 text-center text-gray-400">{t('ui.no_unsettled_expenses')}</div>;
   }
 
   return (

@@ -47,6 +47,9 @@ export const UserInput: React.FC<{
     if ('Backspace' === e.key && '' === nameOrEmail) {
       if (group && 0 < extraParticipants.length) {
         removeParticipant(extraParticipants[extraParticipants.length - 1]!.id);
+      } else if (group && isEditing) {
+        // Group of an existing expense can't be changed, only its guests
+        return;
       } else if (group) {
         const currentPath = window.location.pathname;
         const searchParams = new URLSearchParams(window.location.search);
@@ -111,7 +114,7 @@ export const UserInput: React.FC<{
         type="email"
         placeholder={
           isEditing && Boolean(group)
-            ? t('expense_details.add_expense_details.user_input.cannot_change_group')
+            ? t('expense_details.add_expense_details.user_input.add_remove_guests')
             : group
               ? t('expense_details.add_expense_details.user_input.add_remove_group_or_person')
               : 1 < participants.length
@@ -123,7 +126,6 @@ export const UserInput: React.FC<{
         onKeyDown={handleKeyDown}
         className="min-w-[100px] grow bg-transparent outline-hidden placeholder:text-sm focus:ring-0"
         autoFocus
-        disabled={isEditing && Boolean(group)}
       />
     </div>
   );

@@ -17,7 +17,7 @@ import { type GetServerSideProps } from 'next';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { BalanceList } from '~/components/Expense/BalanceList';
 import { ExpenseList } from '~/components/Expense/ExpenseList';
@@ -60,6 +60,15 @@ const BalancePage: NextPageWithUser<{
   const groupDetailQuery = api.group.getGroupDetails.useQuery({ groupId });
   const groupTotalQuery = api.group.getGroupTotals.useQuery({ groupId });
   const expensesQuery = api.expense.getGroupExpenses.useQuery({ groupId });
+
+  // Members plus guests (non-members added to individual group expenses)
+  const balanceUsers = useMemo(
+    () => [
+      ...(groupDetailQuery.data?.groupUsers.map((gu) => gu.user) ?? []),
+      ...(groupDetailQuery.data?.guestUsers ?? []),
+    ],
+    [groupDetailQuery.data],
+  );
   const deleteGroupMutation = api.group.delete.useMutation();
   const leaveGroupMutation = api.group.leaveGroup.useMutation();
   const toggleArchiveMutation = api.group.toggleArchive.useMutation();
@@ -96,12 +105,25 @@ const BalancePage: NextPageWithUser<{
 
   const isAdmin = groupDetailQuery.data?.userId === user.id;
   const isArchived = Boolean(groupDetailQuery.data?.archivedAt);
-  const canDeleteOrArchive =
-    groupDetailQuery.data?.userId === user.id &&
-    !groupDetailQuery.data?.groupBalances.find((bal) => 0n !== bal.amount);
-  const canLeave = !groupDetailQuery.data?.groupBalances.find(
-    (bal) => 0n !== bal.amount && bal.userId === user.id,
+  // Per_expense mode: BalanceView ignores settledAt, so use the server's unsettled list
+  const hasOutstandingBalance = useCallback(
+    (userId?: number) => {
+      const unsettledUserIds = groupDetailQuery.data?.unsettledUserIds;
+      if (unsettledUserIds) {
+        return undefined === userId
+          ? 0 < unsettledUserIds.length
+          : unsettledUserIds.includes(userId);
+      }
+      return Boolean(
+        groupDetailQuery.data?.groupBalances.find(
+          (bal) => 0n !== bal.amount && (undefined === userId || bal.userId === userId),
+        ),
+      );
+    },
+    [groupDetailQuery.data],
   );
+  const canDeleteOrArchive = groupDetailQuery.data?.userId === user.id && !hasOutstandingBalance();
+  const canLeave = !hasOutstandingBalance(user.id);
 
   const onGroupDelete = useCallback(() => {
     deleteGroupMutation.mutate(
@@ -245,9 +267,7 @@ const BalancePage: NextPageWithUser<{
                       ) : (
                         isAdmin &&
                         (() => {
-                          const canLeave = !groupDetailQuery.data?.groupBalances.find(
-                            (b) => 0n !== b.amount && b.userId === groupUser.userId,
-                          );
+                          const canLeave = !hasOutstandingBalance(groupUser.userId);
 
                           return (
                             <SimpleConfirmationDialog
@@ -517,7 +537,7 @@ const BalancePage: NextPageWithUser<{
                 <GroupMyBalance
                   userId={user.id}
                   groupBalances={groupDetailQuery.data?.groupBalances}
-                  users={groupDetailQuery.data?.groupUsers.map((gu) => gu.user)}
+                  users={balanceUsers}
                   groupId={groupId}
                 />
               )}
@@ -573,7 +593,7 @@ const BalancePage: NextPageWithUser<{
                 ) : (
                   <BalanceList
                     groupBalances={groupDetailQuery.data?.groupBalances}
-                    users={groupDetailQuery.data?.groupUsers.map((gu) => gu.user)}
+                    users={balanceUsers}
                   />
                 )}
               </TabsContent>

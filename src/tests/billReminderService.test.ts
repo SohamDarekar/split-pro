@@ -51,6 +51,12 @@ const setupTransaction = () => {
 beforeEach(() => {
   jest.clearAllMocks();
   setupTransaction();
+  // Fixtures use fixed 2026-07/08 due dates; pin "now" so status expectations don't age out
+  jest.useFakeTimers({ now: new Date('2026-07-15T00:00:00Z') });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('refreshOverdueStatuses', () => {

@@ -111,7 +111,12 @@ const ExpenseDetails: React.FC<ExpenseDetailsProps> = ({ user, expense }) => {
                 {i18nReady ? `: ${cronString}` : ''}
               </Link>
             ) : null}
-            {expense.group ? (
+            {expense.group && !expense.isViewerGroupMember ? (
+              <Button variant="outline" size="sm" className="mt-2 gap-2" disabled>
+                <Users className="size-4" />
+                {expense.group.name}
+              </Button>
+            ) : expense.group ? (
               <Link href={`/groups/${expense.group.id}`}>
                 <Button variant="outline" size="sm" className="mt-2 gap-2">
                   <div className="relative">

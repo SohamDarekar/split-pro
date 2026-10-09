@@ -5,6 +5,8 @@ import { db } from '~/server/db';
 import { sendSignUpEmail } from '~/server/mailer';
 import { env } from '~/env';
 import { getBaseUrl } from '~/utils/api';
+import { simplifyDebts } from '~/lib/simplify';
+import { getUnsettledUserIds } from './group';
 
 export const adminRouter = createTRPCRouter({
   getStats: adminProcedure.query(async () => {
@@ -134,6 +136,109 @@ export const adminRouter = createTRPCRouter({
       ]);
 
       return { groups, total, page, pageSize };
+    }),
+
+  getGroup: adminProcedure.input(z.object({ groupId: z.number() })).query(async ({ input }) => {
+    const group = await db.group.findUnique({
+      where: { id: input.groupId },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        groupUsers: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+          orderBy: { userId: 'asc' },
+        },
+        groupBalances: true,
+        _count: { select: { expenses: true } },
+      },
+    });
+
+    if (!group) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
+    }
+
+    let outstandingUserIds: number[];
+    if ('per_expense' === env.SETTLEMENT_MODE) {
+      outstandingUserIds = await getUnsettledUserIds(group.id);
+    } else {
+      const balances = group.simplifyDebts
+        ? simplifyDebts(group.groupBalances)
+        : group.groupBalances;
+      outstandingUserIds = balances.filter((b) => 0n !== b.amount).map((b) => b.userId);
+    }
+
+    const { groupBalances: _, ...rest } = group;
+    return { ...rest, outstandingUserIds: [...new Set(outstandingUserIds)] };
+  }),
+
+  renameGroup: adminProcedure
+    .input(z.object({ groupId: z.number(), name: z.string().trim().min(1) }))
+    .mutation(async ({ input }) => {
+      await db.group.update({ where: { id: input.groupId }, data: { name: input.name } });
+      return { success: true };
+    }),
+
+  addGroupMember: adminProcedure
+    .input(z.object({ groupId: z.number(), email: z.string().trim().toLowerCase().email() }))
+    .mutation(async ({ input }) => {
+      const user = await db.user.findUnique({ where: { email: input.email } });
+      if (!user) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'No user with this email' });
+      }
+
+      const existing = await db.groupUser.findUnique({
+        where: { groupId_userId: { groupId: input.groupId, userId: user.id } },
+      });
+      if (existing) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'User is already a member' });
+      }
+
+      await db.$transaction([
+        db.groupUser.create({ data: { groupId: input.groupId, userId: user.id } }),
+        // Same as group.addMembers: default split no longer matches membership
+        db.groupDefaultSplit.deleteMany({ where: { groupId: input.groupId } }),
+      ]);
+      return { success: true };
+    }),
+
+  removeGroupMember: adminProcedure
+    .input(z.object({ groupId: z.number(), userId: z.number() }))
+    .mutation(async ({ input }) => {
+      const group = await db.group.findUnique({
+        where: { id: input.groupId },
+        select: { userId: true },
+      });
+      if (!group) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Group not found' });
+      }
+      if (group.userId === input.userId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Make someone else the owner before removing the owner',
+        });
+      }
+
+      // Admin override: outstanding balances stay on the group's expenses, the user just
+      // Stops being a member (they're shown as a guest on the group page).
+      await db.$transaction([
+        db.groupUser.delete({
+          where: { groupId_userId: { groupId: input.groupId, userId: input.userId } },
+        }),
+        db.groupDefaultSplit.deleteMany({ where: { groupId: input.groupId } }),
+      ]);
+      return { success: true };
+    }),
+
+  setGroupOwner: adminProcedure
+    .input(z.object({ groupId: z.number(), userId: z.number() }))
+    .mutation(async ({ input }) => {
+      const member = await db.groupUser.findUnique({
+        where: { groupId_userId: { groupId: input.groupId, userId: input.userId } },
+      });
+      if (!member) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Owner must be a group member' });
+      }
+      await db.group.update({ where: { id: input.groupId }, data: { userId: input.userId } });
+      return { success: true };
     }),
 
   deleteGroup: adminProcedure

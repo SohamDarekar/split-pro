@@ -17,27 +17,10 @@ import {
 
 /**
  * In per_expense mode, checks whether any non-payer participants remain
- * unsettled in the given group (or for a specific userId within that group).
+ * unsettled in the given group.
  * Mirrors the BalanceView implicit exclusion of payer rows (userId != paidBy).
  */
-async function hasUnsettledParticipants(groupId: number, userId?: number): Promise<boolean> {
-  if (userId !== undefined) {
-    const rows = await db.$queryRaw<[{ exists: boolean }]>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM "ExpenseParticipant" ep
-        JOIN "Expense" e ON ep."expenseId" = e.id
-        WHERE e."groupId" = ${groupId}
-          AND e."deletedAt" IS NULL
-          AND e."splitType" NOT IN ('SETTLEMENT', 'CURRENCY_CONVERSION')
-          AND ep."settledAt" IS NULL
-          AND ep."userId" != e."paidBy"
-          AND ep."userId" = ${userId}
-      )
-    `;
-    return rows[0]?.exists ?? false;
-  }
-
+async function hasUnsettledParticipants(groupId: number): Promise<boolean> {
   const rows = await db.$queryRaw<[{ exists: boolean }]>`
     SELECT EXISTS (
       SELECT 1
@@ -51,6 +34,29 @@ async function hasUnsettledParticipants(groupId: number, userId?: number): Promi
     )
   `;
   return rows[0]?.exists ?? false;
+}
+
+/**
+ * In per_expense mode, returns ids of users with an outstanding share in the group:
+ * debtors with an unsettled share, and payers still waiting on one.
+ */
+export async function getUnsettledUserIds(groupId: number): Promise<number[]> {
+  const rows = await db.$queryRaw<{ userId: number }[]>`
+    SELECT DISTINCT u."userId"
+    FROM (
+      SELECT ep."userId", e."paidBy"
+      FROM "ExpenseParticipant" ep
+      JOIN "Expense" e ON ep."expenseId" = e.id
+      WHERE e."groupId" = ${groupId}
+        AND e."deletedAt" IS NULL
+        AND e."splitType" NOT IN ('SETTLEMENT', 'CURRENCY_CONVERSION')
+        AND ep."settledAt" IS NULL
+        AND ep."userId" != e."paidBy"
+        AND ep.amount != 0
+    ) unsettled
+    CROSS JOIN LATERAL (VALUES (unsettled."userId"), (unsettled."paidBy")) AS u("userId")
+  `;
+  return rows.map((r) => r.userId);
 }
 
 export const groupRouter = createTRPCRouter({
@@ -196,6 +202,14 @@ export const groupRouter = createTRPCRouter({
       group.groupBalances = simplifyDebts(group.groupBalances);
     }
 
+    // Guests: users with balances from group expenses who aren't group members
+    const memberIds = new Set(group.groupUsers.map((gu) => gu.userId));
+    const guestIds = [
+      ...new Set(group.groupBalances.flatMap((b) => [b.userId, b.friendId])),
+    ].filter((id) => !memberIds.has(id));
+    const guestUsers =
+      0 < guestIds.length ? await ctx.db.user.findMany({ where: { id: { in: guestIds } } }) : [];
+
     const defaultSplit =
       group.groupDefaultSplit &&
       parseSerializedDefaultSplit(
@@ -203,8 +217,14 @@ export const groupRouter = createTRPCRouter({
         group.groupDefaultSplit.shares,
       );
 
+    // BalanceView ignores settledAt, so per_expense mode needs its own outstanding check
+    const unsettledUserIds =
+      'per_expense' === env.SETTLEMENT_MODE ? await getUnsettledUserIds(group.id) : null;
+
     return {
       ...group,
+      guestUsers,
+      unsettledUserIds,
       defaultSplit,
     };
   }),
@@ -321,7 +341,7 @@ export const groupRouter = createTRPCRouter({
       let hasOutstandingBalance: boolean;
 
       if (env.SETTLEMENT_MODE === 'per_expense') {
-        hasOutstandingBalance = await hasUnsettledParticipants(input.groupId, userId);
+        hasOutstandingBalance = (await getUnsettledUserIds(input.groupId)).includes(userId);
       } else {
         const groupBalances = await ctx.db.balanceView.findMany({
           where: { groupId: input.groupId },
@@ -329,7 +349,9 @@ export const groupRouter = createTRPCRouter({
         const finalGroupBalances = group.simplifyDebts
           ? simplifyDebts(groupBalances)
           : groupBalances;
-        hasOutstandingBalance = finalGroupBalances.some((b) => b.userId === userId && 0n !== b.amount);
+        hasOutstandingBalance = finalGroupBalances.some(
+          (b) => b.userId === userId && 0n !== b.amount,
+        );
       }
 
       if (hasOutstandingBalance) {

@@ -293,29 +293,6 @@ export const expenseRouter = createTRPCRouter({
             message: 'Failed to create expense',
           });
         }
-
-        // Individually added users must be group members so group balances stay consistent.
-        // Only on create, and only when the caller is a member, so non-members can't join groups
-        // And edits of old expenses don't re-add users who have left.
-        const { groupId } = input;
-        const callerMembership =
-          null !== groupId && !input.expenseId
-            ? await db.groupUser.findUnique({
-                where: { groupId_userId: { groupId, userId: ctx.session.user.id } },
-              })
-            : null;
-        if (null !== groupId && callerMembership) {
-          const { count } = await db.groupUser.createMany({
-            data: input.participants
-              .filter((p) => 0n !== p.amount)
-              .map((p) => ({ groupId, userId: p.userId })),
-            skipDuplicates: true,
-          });
-          if (0 < count) {
-            // Same as group.addMembers: default split no longer matches membership
-            await db.groupDefaultSplit.deleteMany({ where: { groupId } });
-          }
-        }
       }
 
       return results;
@@ -499,7 +476,7 @@ export const expenseRouter = createTRPCRouter({
 
   getExpenseDetails: protectedProcedure
     .input(z.object({ expenseId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const expense = await db.expense.findUnique({
         where: {
           id: input.expenseId,
@@ -571,7 +548,21 @@ export const expenseRouter = createTRPCRouter({
         expense.recurrence.job.schedule = expense.recurrence.job.schedule.replaceAll('$', 'L');
       }
 
-      return expense;
+      if (!expense) {
+        return expense;
+      }
+
+      // Guests of a group expense can't open the group page
+      const isViewerGroupMember =
+        null === expense.groupId ||
+        null !==
+          (await db.groupUser.findUnique({
+            where: {
+              groupId_userId: { groupId: expense.groupId, userId: ctx.session.user.id },
+            },
+          }));
+
+      return { ...expense, isViewerGroupMember };
     }),
 
   getAllExpenses: protectedProcedure.query(async ({ ctx }) => {

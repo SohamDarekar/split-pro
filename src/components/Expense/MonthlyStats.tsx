@@ -79,7 +79,9 @@ interface MonthlyStatsProps {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAmt(amount: bigint, currency: string): string {
-  if (!isCurrencyCode(currency)) {return String(Number(amount) / 100);}
+  if (!isCurrencyCode(currency)) {
+    return String(Number(amount) / 100);
+  }
   return getCurrencyHelpers({ currency }).toUIString(amount);
 }
 
@@ -226,7 +228,9 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
   const year = now.getFullYear();
 
   const hasAny = personal.length > 0 || group.length > 0;
-  if (!hasAny) {return null;}
+  if (!hasAny) {
+    return null;
+  }
 
   const allTotals = [...personal, ...group];
   const currencyFreq = allTotals.reduce<Record<string, number>>((acc, { currency }) => {
@@ -250,7 +254,9 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
       .sort((a, b) => (a.raw > b.raw ? -1 : 1));
 
     const total = filtered.reduce((s, c) => s + c.raw, 0n);
-    if (total === 0n) {return [];}
+    if (total === 0n) {
+      return [];
+    }
 
     return filtered.map((c, i) => ({
       name: c.name,
@@ -307,7 +313,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
 
       {/* Hero card — always visible */}
       <div className="mb-4 overflow-hidden rounded-3xl p-5" style={HERO_CARD_STYLE}>
-        <p className="text-xs font-medium uppercase tracking-widest text-white/50">
+        <p className="text-xs font-medium tracking-widest text-white/50 uppercase">
           total you spent
         </p>
         <p className="mt-1 text-4xl font-black tracking-tight text-white" style={GLOW_STYLE}>
@@ -361,7 +367,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
       {/* Category donut — always visible */}
       {catData.length > 0 && (
         <div className="mb-4 overflow-hidden rounded-3xl p-5" style={DARK_CARD_STYLE}>
-          <p className="mb-1 text-xs font-medium uppercase tracking-widest text-white/50">
+          <p className="mb-1 text-xs font-medium tracking-widest text-white/50 uppercase">
             spending by category
           </p>
           <div className="flex gap-4">
@@ -399,7 +405,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
           {/* Group breakdown */}
           {groupData.length > 0 && (
             <div className="mb-4 overflow-hidden rounded-3xl p-5" style={DARK_CARD_STYLE}>
-              <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/50">
+              <p className="mb-3 text-xs font-medium tracking-widest text-white/50 uppercase">
                 spending by group
               </p>
               <div className="flex flex-col gap-3">
@@ -429,7 +435,7 @@ export const MonthlyStats: React.FC<MonthlyStatsProps> = ({
               style={BIGGEST_CARD_STYLE}
             >
               <div>
-                <p className="text-xs font-medium uppercase tracking-widest text-white/50">
+                <p className="text-xs font-medium tracking-widest text-white/50 uppercase">
                   biggest expense
                 </p>
                 <p className="mt-0.5 text-base font-bold text-white">{biggestExpense.name}</p>
