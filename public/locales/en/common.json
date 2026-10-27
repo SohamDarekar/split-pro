@@ -109,7 +109,8 @@
     "connect": "Connect",
     "settle_for_me": "Settle for me",
     "unsettle": "Unsettle",
-    "mark_settled": "Mark settled"
+    "mark_settled": "Mark settled",
+    "restore": "Restore"
   },
   "actors": {
     "all": "All",
@@ -248,6 +249,17 @@
       "are_settled_up": "are settled up",
       "is_settled_up": "is settled up",
       "press_balance_info": "Press on individual balance to initiate settlement"
+    },
+    "comments": {
+      "title": "Comments",
+      "placeholder": "Add a comment",
+      "empty": "No comments yet",
+      "delete": "Delete comment",
+      "send_failed": "Could not post comment"
+    },
+    "restore_expense_details": {
+      "restored": "Expense restored",
+      "failed": "Could not restore expense"
     },
     "delete_expense_details": {
       "text": "This action cannot be undone. This will permanently delete your expense.",

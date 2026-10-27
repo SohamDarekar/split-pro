@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import { useCallback, useMemo } from 'react';
 
 import { DeleteExpense } from '~/components/Expense/DeleteExpense';
+import { ExpenseComments } from '~/components/Expense/ExpenseComments';
 import ExpenseDetails, {
   EditCurrencyConversion,
   EditSettlement,
@@ -108,7 +109,16 @@ const ExpensesPage: NextPageWithUser = ({ user }) => {
           </div>
         }
       >
-        {expenseQuery.data ? <ExpenseDetails user={user} expense={expenseQuery.data} /> : null}
+        {expenseQuery.data ? (
+          <>
+            <ExpenseDetails user={user} expense={expenseQuery.data} />
+            <ExpenseComments
+              expenseId={expenseId}
+              userId={user.id}
+              readOnly={!!expenseQuery.data.deletedBy}
+            />
+          </>
+        ) : null}
       </MainLayout>
     </>
   );

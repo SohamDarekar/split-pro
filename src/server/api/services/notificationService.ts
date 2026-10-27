@@ -334,6 +334,53 @@ export async function sendExpenseUnsettledNotification(expenseId: string, debtor
   }
 }
 
+export async function sendExpenseCommentNotification(noteId: string) {
+  try {
+    const note = await db.expenseNote.findUnique({
+      where: { id: noteId },
+      select: {
+        note: true,
+        createdById: true,
+        createdBy: { select: { name: true, email: true } },
+        expense: {
+          select: {
+            id: true,
+            name: true,
+            paidBy: true,
+            addedBy: true,
+            expenseParticipants: { select: { userId: true } },
+            expenseNotes: { select: { createdById: true } },
+          },
+        },
+      },
+    });
+
+    if (!note) {
+      return;
+    }
+
+    const { expense } = note;
+    const recipients = new Set<number>([
+      expense.paidBy,
+      expense.addedBy,
+      ...expense.expenseParticipants.map(({ userId }) => userId),
+      ...expense.expenseNotes.map(({ createdById }) => createdById),
+    ]);
+    recipients.delete(note.createdById);
+
+    const authorName = note.createdBy.name ?? note.createdBy.email ?? 'Someone';
+    const preview = 80 < note.note.length ? `${note.note.slice(0, 77)}...` : note.note;
+
+    await sendPushNotificationToUsers([...recipients], {
+      title: `${authorName} commented on ${expense.name}`,
+      message: preview,
+      data: { url: `/expenses/${expense.id}` },
+    });
+  } catch (error) {
+    console.error('Error sending expense comment notification', error);
+  }
+}
+
 export async function checkRecurrenceNotifications() {
   try {
     const recurrences = await db.expenseRecurrence.findMany({

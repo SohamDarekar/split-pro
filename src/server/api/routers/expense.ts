@@ -13,8 +13,16 @@ import {
   getBatchCurrencyRatesSchema,
   getCurrencyRateSchema,
 } from '~/types/expense.types';
-import { createExpense, deleteExpense, editExpense } from '../services/splitService';
-import { sendExpenseUnsettledNotification } from '../services/notificationService';
+import {
+  createExpense,
+  deleteExpense,
+  editExpense,
+  restoreExpense,
+} from '../services/splitService';
+import {
+  sendExpenseCommentNotification,
+  sendExpenseUnsettledNotification,
+} from '../services/notificationService';
 import { currencyRateProvider } from '../services/currencyRateService';
 import { type CurrencyCode, isCurrencyCode } from '~/lib/currency';
 import { SplitType } from '@prisma/client';
@@ -487,7 +495,10 @@ export const expenseRouter = createTRPCRouter({
               user: true,
             },
           },
-          expenseNotes: true,
+          expenseNotes: {
+            orderBy: { createdAt: 'asc' },
+            include: { createdBy: { select: { id: true, name: true, email: true, image: true } } },
+          },
           addedByUser: true,
           paidByUser: true,
           deletedByUser: true,
@@ -578,6 +589,7 @@ export const expenseRouter = createTRPCRouter({
       include: {
         expense: {
           include: {
+            group: { select: { id: true, name: true } },
             paidByUser: {
               select: {
                 name: true,
@@ -888,7 +900,95 @@ export const expenseRouter = createTRPCRouter({
       // Fire-and-forget like other push notifications; failures are logged inside
       sendExpenseUnsettledNotification(input.expenseId, input.userId).catch(console.error);
     }),
+
+  restoreExpense: protectedProcedure
+    .input(z.object({ expenseId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      await validateEditExpensePermission(input.expenseId, ctx.session.user.id);
+
+      const expense = await db.expense.findUnique({
+        where: { id: input.expenseId },
+        select: { deletedAt: true, groupId: true, group: { select: { archivedAt: true } } },
+      });
+
+      if (!expense) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
+      }
+
+      if (!expense.deletedAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Expense is not deleted' });
+      }
+
+      if (expense.group?.archivedAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Group is archived' });
+      }
+
+      await restoreExpense(input.expenseId);
+    }),
+
+  addComment: protectedProcedure
+    .input(z.object({ expenseId: z.string(), note: z.string().trim().min(1).max(1000) }))
+    .mutation(async ({ input, ctx }) => {
+      await validateCommentAccess(input.expenseId, ctx.session.user.id);
+
+      const note = await db.expenseNote.create({
+        data: {
+          expenseId: input.expenseId,
+          note: input.note,
+          createdById: ctx.session.user.id,
+        },
+      });
+
+      sendExpenseCommentNotification(note.id).catch(console.error);
+
+      return note;
+    }),
+
+  deleteComment: protectedProcedure
+    .input(z.object({ commentId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const { count } = await db.expenseNote.deleteMany({
+        where: { id: input.commentId, createdById: ctx.session.user.id },
+      });
+
+      if (0 === count) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Comment not found' });
+      }
+    }),
 });
+
+const validateCommentAccess = async (expenseId: string, userId: number): Promise<void> => {
+  const expense = await db.expense.findUnique({
+    where: { id: expenseId },
+    select: {
+      paidBy: true,
+      addedBy: true,
+      groupId: true,
+      deletedAt: true,
+      expenseParticipants: { where: { userId }, select: { userId: true } },
+    },
+  });
+
+  if (!expense) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Expense not found' });
+  }
+
+  const isInvolved =
+    expense.paidBy === userId ||
+    expense.addedBy === userId ||
+    0 < expense.expenseParticipants.length;
+  const isGroupMember =
+    null !== expense.groupId &&
+    null !==
+      (await db.groupUser.findUnique({
+        where: { groupId_userId: { groupId: expense.groupId, userId } },
+        select: { userId: true },
+      }));
+
+  if (!isInvolved && !isGroupMember) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'You cannot comment on this expense' });
+  }
+};
 
 const validateEditExpensePermission = async (expenseId: string, userId: number): Promise<void> => {
   const [expenseParticipant, addedBy] = await Promise.all([

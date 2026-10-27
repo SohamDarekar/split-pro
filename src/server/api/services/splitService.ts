@@ -197,6 +197,30 @@ export async function deleteExpense(expenseId: string, deletedBy: number) {
   sendExpensePushNotification(expenseId).catch(console.error);
 }
 
+export async function restoreExpense(expenseId: string) {
+  const expense = await db.expense.findUnique({
+    where: { id: expenseId },
+    select: { deletedAt: true, conversionToId: true },
+  });
+
+  if (!expense) {
+    throw new Error('Expense not found');
+  }
+
+  if (!expense.deletedAt) {
+    throw new Error('Expense is not deleted');
+  }
+
+  const ids = expense.conversionToId ? [expenseId, expense.conversionToId] : [expenseId];
+
+  await db.expense.updateMany({
+    where: { id: { in: ids } },
+    data: { deletedAt: null, deletedBy: null },
+  });
+
+  sendExpensePushNotification(expenseId).catch(console.error);
+}
+
 export async function editExpense(
   {
     expenseId,

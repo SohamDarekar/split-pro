@@ -1,13 +1,15 @@
 import { SplitType } from '@prisma/client';
-import { ChevronLeftIcon, PencilIcon } from 'lucide-react';
+import { ChevronLeftIcon, PencilIcon, Undo2 } from 'lucide-react';
 import { type GetServerSideProps } from 'next';
 import { useTranslation } from 'next-i18next';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 
 import { DeleteExpense } from '~/components/Expense/DeleteExpense';
+import { ExpenseComments } from '~/components/Expense/ExpenseComments';
 import ExpenseDetails, {
   EditCurrencyConversion,
   EditSettlement,
@@ -33,6 +35,23 @@ const ExpensesPage: NextPageWithUser = ({ user }) => {
     () => (recurrence ? extractTemplateExpenseId(recurrence.job.command) === expenseId : false),
     [recurrence, expenseId],
   );
+
+  const apiUtils = api.useUtils();
+  const restoreMutation = api.expense.restoreExpense.useMutation();
+
+  const handleRestore = useCallback(async () => {
+    try {
+      await restoreMutation.mutateAsync({ expenseId });
+      await apiUtils.invalidate();
+      toast.success(t('expense_details.restore_expense_details.restored'));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('expense_details.restore_expense_details.failed'),
+      );
+    }
+  }, [restoreMutation, expenseId, apiUtils, t]);
 
   const handleEditConfirm = useCallback(async () => {
     await router.push(`/add?expenseId=${expenseId}`);
@@ -110,11 +129,25 @@ const ExpensesPage: NextPageWithUser = ({ user }) => {
                   renderEditButton()
                 )}
               </div>
+            ) : expenseQuery.data ? (
+              <Button variant="ghost" onClick={handleRestore} disabled={restoreMutation.isPending}>
+                <Undo2 className="mr-1 size-4" />
+                {t('actions.restore')}
+              </Button>
             ) : null}
           </div>
         }
       >
-        {expenseQuery.data ? <ExpenseDetails user={user} expense={expenseQuery.data} /> : null}
+        {expenseQuery.data ? (
+          <>
+            <ExpenseDetails user={user} expense={expenseQuery.data} />
+            <ExpenseComments
+              expenseId={expenseId}
+              userId={user.id}
+              readOnly={!!expenseQuery.data.deletedBy}
+            />
+          </>
+        ) : null}
       </MainLayout>
     </>
   );
