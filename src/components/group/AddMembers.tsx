@@ -11,6 +11,7 @@ import { AppDrawer } from '~/components/ui/drawer';
 import { api } from '~/utils/api';
 
 import { EntityAvatar } from '../ui/avatar';
+import InviteQrCode from './InviteQrCode';
 import { Input } from '../ui/input';
 
 const AddMembers: React.FC<{
@@ -157,6 +158,7 @@ const AddMembers: React.FC<{
           </Button>
         </div>
       </div>
+      {group.publicId ? <InviteQrCode publicId={group.publicId} groupName={group.name} /> : null}
       <div className="mt-4 flex flex-col gap-4">
         {filteredUsers?.map((friend) => (
           <Button

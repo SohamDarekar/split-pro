@@ -373,6 +373,14 @@
       "invite_link": "Invite link",
       "no_members": "No members in the group yet."
     },
+    "qr": {
+      "title": "Invite with QR code",
+      "subtitle": "Let people scan to join",
+      "scan_to_join": "Scan with a phone camera to join this group",
+      "or_share_link": "or share the link",
+      "copy_link": "Copy link",
+      "copy_failed": "Could not copy link"
+    },
     "tabs": {
       "balances": "Balances",
       "expenses": "Expenses"
