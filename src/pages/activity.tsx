@@ -14,13 +14,8 @@ import { RefreshCcwDot } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import React, { useMemo, useState } from 'react';
 
-import { ActivityFilters } from '~/components/Activity/ActivityFilters';
-import {
-  type ActivityFilters as ActivityFiltersValue,
-  EMPTY_ACTIVITY_FILTERS,
-  countActiveFilters,
-  filterActivity,
-} from '~/lib/activityFilter';
+import { ActivitySearch } from '~/components/Activity/ActivitySearch';
+import { searchActivity } from '~/lib/activitySearch';
 
 function getPaymentString(
   user: User,
@@ -60,28 +55,12 @@ function getPaymentString(
 const ActivityPage: NextPageWithUser = ({ user }) => {
   const { displayName, t, toUIDate, i18n } = useTranslationWithUtils();
   const expensesQuery = api.expense.getAllExpenses.useQuery();
-  const [filters, setFilters] = useState<ActivityFiltersValue>(EMPTY_ACTIVITY_FILTERS);
+  const [query, setQuery] = useState('');
 
   const filtered = useMemo(
-    () => filterActivity(expensesQuery.data ?? [], filters),
-    [expensesQuery.data, filters],
+    () => searchActivity(expensesQuery.data ?? [], query),
+    [expensesQuery.data, query],
   );
-
-  const { people, groups } = useMemo(() => {
-    const peopleMap = new Map<number, string>();
-    const groupMap = new Map<number, string>();
-    expensesQuery.data?.forEach(({ expense }) => {
-      peopleMap.set(expense.paidBy, displayName(expense.paidByUser, user.id));
-      if (expense.group) {
-        groupMap.set(expense.group.id, expense.group.name);
-      }
-    });
-    const toOptions = (map: Map<number, string>) =>
-      [...map.entries()]
-        .map(([id, label]) => ({ id, label }))
-        .sort((a, b) => a.label.localeCompare(b.label));
-    return { people: toOptions(peopleMap), groups: toOptions(groupMap) };
-  }, [expensesQuery.data, displayName, user.id]);
 
   const actions = React.useMemo(
     () => (
@@ -106,21 +85,12 @@ const ActivityPage: NextPageWithUser = ({ user }) => {
         loading={expensesQuery.isPending}
       >
         <div className="flex flex-col gap-4">
-          {expensesQuery.data?.length ? (
-            <ActivityFilters
-              filters={filters}
-              onChange={setFilters}
-              people={people}
-              groups={groups}
-            />
-          ) : null}
+          {expensesQuery.data?.length ? <ActivitySearch value={query} onChange={setQuery} /> : null}
           {!expensesQuery.data?.length ? (
             <div className="mt-[30vh] text-center text-gray-400">{t('ui.no_activity')}</div>
           ) : null}
-          {expensesQuery.data?.length && !filtered.length && 0 < countActiveFilters(filters) ? (
-            <div className="mt-16 text-center text-gray-400">
-              {t('activity_filters.no_results')}
-            </div>
+          {expensesQuery.data?.length && !filtered.length && '' !== query.trim() ? (
+            <div className="mt-16 text-center text-gray-400">{t('activity_search.no_results')}</div>
           ) : null}
           {filtered.map((e) => {
             const { toUIString } = getCurrencyHelpers({
@@ -184,6 +154,6 @@ const ActivityPage: NextPageWithUser = ({ user }) => {
 
 ActivityPage.auth = true;
 
-export const getStaticProps = withI18nStaticProps(['common', 'categories']);
+export const getStaticProps = withI18nStaticProps(['common']);
 
 export default ActivityPage;

@@ -112,24 +112,9 @@
     "mark_settled": "Mark settled",
     "restore": "Restore"
   },
-  "activity_filters": {
-    "search_placeholder": "Search activity",
-    "filters": "Filters",
-    "clear": "Clear filters",
-    "kind": "Type",
-    "kind_all": "Everything",
-    "kind_expenses": "Expenses",
-    "kind_settlements": "Settlements",
-    "kind_deleted": "Deleted",
-    "category": "Category",
-    "paid_by": "Paid by",
-    "group": "Group",
-    "any": "Any",
-    "from": "From",
-    "to": "To",
-    "min_amount": "Min amount",
-    "max_amount": "Max amount",
-    "no_results": "No activity matches your filters"
+  "activity_search": {
+    "placeholder": "Search activity",
+    "no_results": "No activity matches your search"
   },
   "actors": {
     "all": "All",
