@@ -110,7 +110,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           env(safe-area-inset-bottom) resolves to 0). env(...) is added on top,
           not substituted, so notched iPhones get extra clearance above the
           home-indicator without regressing spacing anywhere else. */}
-      <nav className="bg-opacity-80 fixed bottom-0 flex w-full justify-between border-t px-2 pb-[calc(1rem_+_env(safe-area-inset-bottom))] shadow-xs backdrop-blur-lg lg:hidden">
+      <nav className="bg-background fixed bottom-0 z-40 flex w-full justify-between border-t px-2 pb-[calc(1rem_+_env(safe-area-inset-bottom))] lg:hidden">
         <NavItem
           title={t?.('navigation.balances') ?? 'Balances'}
           Icon={SolidScaleIcon}
