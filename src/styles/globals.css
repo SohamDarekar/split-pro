@@ -275,6 +275,24 @@ body {
   @apply h-full;
 }
 
+/*
+  iOS Safari zooms the page when a focused field's font-size is under 16px.
+  Keep text fields at 16px on touch devices instead of disabling pinch-zoom via
+  the viewport meta tag. Deliberately outside any @layer so it wins over the
+  `text-sm`/`text-xs` utilities used by the shared Input, Textarea, NativeSelect
+  and CommandInput components; larger sizes (e.g. `text-lg`) are left alone.
+*/
+@media (pointer: coarse) {
+  :is(input, textarea, select):is(
+    [class~='text-xs'],
+    [class~='text-sm'],
+    [class~='sm:text-sm'],
+    [class~='md:text-sm']
+  ) {
+    font-size: 16px;
+  }
+}
+
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
